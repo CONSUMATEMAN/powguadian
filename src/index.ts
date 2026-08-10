@@ -5,19 +5,30 @@ import {
   scanContract,
   ScanResult,
 } from "./services/scanner";
+import {
+  answerPowQuestion,
+  isPowRelated,
+} from "./services/moderator";
 
-const bot = new Telegraf(config.telegramBotToken);
+const bot = new Telegraf(
+  config.telegramBotToken
+);
 
 /* -------------------------------------------------------------------------- */
 /* HELPERS                                                                    */
 /* -------------------------------------------------------------------------- */
 
-const shortenAddress = (address: string): string => {
+const shortenAddress = (
+  address: string
+): string => {
   if (!address || address.length < 12) {
     return address;
   }
 
-  return `${address.slice(0, 6)}...${address.slice(-4)}`;
+  return `${address.slice(
+    0,
+    6
+  )}...${address.slice(-4)}`;
 };
 
 const formatNumber = (
@@ -229,7 +240,9 @@ const formatSecurity = (
       "Detected",
       "No"
     )}\n` +
-    `Proxy: ${security.isProxy ? "Yes" : "No"}\n` +
+    `Proxy: ${
+      security.isProxy ? "Yes" : "No"
+    }\n` +
     `Honeypot: ${honeypot}\n` +
     `Open source: ${openSource}\n` +
     `Buy tax: ${
@@ -267,11 +280,21 @@ const formatScanResult = (
     return (
       `🐾 POWGUADIAN\n` +
       `Liquidity Pair\n\n` +
-      `Pair: ${shortenAddress(result.address)}\n` +
-      `Token 0: ${result.token0 ?? "—"}\n` +
-      `Token 1: ${result.token1 ?? "—"}\n` +
-      `Reserve 0: ${formatNumber(result.reserve0)}\n` +
-      `Reserve 1: ${formatNumber(result.reserve1)}`
+      `Pair: ${shortenAddress(
+        result.address
+      )}\n` +
+      `Token 0: ${
+        result.token0 ?? "—"
+      }\n` +
+      `Token 1: ${
+        result.token1 ?? "—"
+      }\n` +
+      `Reserve 0: ${formatNumber(
+        result.reserve0
+      )}\n` +
+      `Reserve 1: ${formatNumber(
+        result.reserve1
+      )}`
     );
   }
 
@@ -293,21 +316,30 @@ const formatScanResult = (
 
   let response =
     `🐾 POWGUADIAN\n` +
-    `${result.name ?? "Unknown Token"} ` +
-    `• ${result.symbol ?? "TOKEN"}\n\n`;
+    `${result.name ?? "Unknown Token"} • ${
+      result.symbol ?? "TOKEN"
+    }\n\n`;
 
   /* TOKEN */
 
   response +=
     `Token\n` +
-    `Name: ${result.name ?? "—"}\n` +
-    `Symbol: ${result.symbol ?? "—"}\n` +
-    `CA: ${shortenAddress(result.address)}\n\n`;
+    `Name: ${
+      result.name ?? "—"
+    }\n` +
+    `Symbol: ${
+      result.symbol ?? "—"
+    }\n` +
+    `CA: ${shortenAddress(
+      result.address
+    )}\n\n`;
 
   /* RISK */
 
   response +=
-    `Risk: ${riskEmoji(risk)} ${risk}\n\n`;
+    `Risk: ${riskEmoji(
+      risk
+    )} ${risk}\n\n`;
 
   /* MARKET */
 
@@ -326,9 +358,13 @@ const formatScanResult = (
       market?.volume24h
     )}\n` +
     `Buys / Sells: ${
-      formatNumber(market?.buys24h)
+      formatNumber(
+        market?.buys24h
+      )
     } / ${
-      formatNumber(market?.sells24h)
+      formatNumber(
+        market?.sells24h
+      )
     }\n\n`;
 
   /* LIQUIDITY */
@@ -338,16 +374,20 @@ const formatScanResult = (
 
   response +=
     `Liquidity\n` +
-    `DEX: ${market?.dex ?? "—"}\n` +
-    `Pair: ${market?.pairLabel ?? "—"}\n` +
+    `DEX: ${
+      market?.dex ?? "—"
+    }\n` +
+    `Pair: ${
+      market?.pairLabel ?? "—"
+    }\n` +
     `LP status: ${lpStatus}\n` +
     `LP burned: ${
       liquidity?.lpBurned
         ? "Yes"
         : liquidity?.lpBurnPercent !==
-            null &&
-          liquidity?.lpBurnPercent !==
-            undefined
+              null &&
+            liquidity?.lpBurnPercent !==
+              undefined
           ? `No (${liquidity.lpBurnPercent.toFixed(
               2
             )}%)`
@@ -419,7 +459,9 @@ const formatScanResult = (
   /* SECURITY */
 
   response +=
-    `${formatSecurity(result)}\n\n`;
+    `${formatSecurity(
+      result
+    )}\n\n`;
 
   /* PROJECT */
 
@@ -508,8 +550,11 @@ const formatScanResult = (
   if (observations.length > 0) {
     response += `Analysis\n`;
 
-    for (const observation of observations) {
-      response += `• ${observation}\n`;
+    for (
+      const observation of observations
+    ) {
+      response +=
+        `• ${observation}\n`;
     }
 
     response += `\n`;
@@ -545,13 +590,19 @@ const scanAddresses = async (
     `Market • Liquidity • Holders • Security`
   );
 
-  for (const address of addresses) {
+  for (
+    const address of addresses
+  ) {
     try {
       const result =
-        await scanContract(address);
+        await scanContract(
+          address
+        );
 
       await ctx.reply(
-        formatScanResult(result)
+        formatScanResult(
+          result
+        )
       );
     } catch (error) {
       console.error(
@@ -575,32 +626,38 @@ const scanAddresses = async (
 /* COMMANDS                                                                   */
 /* -------------------------------------------------------------------------- */
 
-bot.start(async (ctx) => {
-  await ctx.reply(
-    `🐾 POWGUADIAN\n\n` +
-    `Your BSC token intelligence guardian.\n\n` +
-    `Send me a token contract address ` +
-    `or token link and I'll analyze it.\n\n` +
-    `Use /help for commands.`
-  );
-});
+bot.start(
+  async (ctx) => {
+    await ctx.reply(
+      `🐾 POWGUADIAN\n\n` +
+      `Your BSC token intelligence guardian.\n\n` +
+      `Ask me about POW or send me a ` +
+      `token contract address and I'll analyze it.\n\n` +
+      `Use /help for commands.`
+    );
+  }
+);
 
-bot.help(async (ctx) => {
-  await ctx.reply(
-    `🐾 POWGUADIAN\n\n` +
-    `Commands\n\n` +
-    `/start — Start the bot\n` +
-    `/help — Show commands\n` +
-    `/scan — Scan a token\n\n` +
-    `Automatic scanning\n\n` +
-    `Send a:\n` +
-    `• Token contract\n` +
-    `• Pair address\n` +
-    `• PancakeSwap link\n` +
-    `• BscScan link\n` +
-    `• DexScreener link`
-  );
-});
+bot.help(
+  async (ctx) => {
+    await ctx.reply(
+      `🐾 POWGUADIAN\n\n` +
+      `Commands\n\n` +
+      `/start — Start the bot\n` +
+      `/help — Show commands\n` +
+      `/scan — Scan a token\n\n` +
+      `AI POW Moderator\n\n` +
+      `Ask natural-language questions about POW.\n\n` +
+      `Automatic scanning\n\n` +
+      `Send a:\n` +
+      `• Token contract\n` +
+      `• Pair address\n` +
+      `• PancakeSwap link\n` +
+      `• BscScan link\n` +
+      `• DexScreener link`
+    );
+  }
+);
 
 bot.command(
   "scan",
@@ -619,7 +676,7 @@ bot.command(
 );
 
 /* -------------------------------------------------------------------------- */
-/* AUTOMATIC ADDRESS DETECTION                                                */
+/* POW AI MODERATOR + AUTOMATIC ADDRESS DETECTION                             */
 /* -------------------------------------------------------------------------- */
 
 bot.on(
@@ -628,21 +685,76 @@ bot.on(
     const text =
       ctx.message.text.trim();
 
-    if (text.startsWith("/")) {
+    if (!text) {
       return;
     }
 
+    /*
+     * Ignore bot commands.
+     */
+    if (
+      text.startsWith("/")
+    ) {
+      return;
+    }
+
+    /*
+     * Contract addresses and supported links
+     * always go directly to the scanner.
+     */
     const addresses =
       extractAddresses(text);
 
-    if (addresses.length === 0) {
+    if (
+      addresses.length > 0
+    ) {
+      await scanAddresses(
+        ctx,
+        addresses
+      );
+
       return;
     }
 
-    await scanAddresses(
-      ctx,
-      addresses
-    );
+    /*
+     * Normal conversation is ignored.
+     *
+     * The AI moderator only activates when
+     * the message appears to be related to POW.
+     */
+    if (
+      !isPowRelated(text)
+    ) {
+      return;
+    }
+
+    try {
+      await ctx.sendChatAction(
+        "typing"
+      );
+
+      const answer =
+        await answerPowQuestion(
+          text
+        );
+
+      if (!answer.trim()) {
+        return;
+      }
+
+      await ctx.reply(
+        answer
+      );
+    } catch (error) {
+      console.error(
+        "POW moderator error:",
+        error
+      );
+
+      await ctx.reply(
+        `POWGUADIAN couldn't process that question right now.`
+      );
+    }
   }
 );
 
@@ -650,12 +762,14 @@ bot.on(
 /* ERROR HANDLING                                                             */
 /* -------------------------------------------------------------------------- */
 
-bot.catch((error) => {
-  console.error(
-    "POWGUADIAN BOT ERROR:",
-    error
-  );
-});
+bot.catch(
+  (error) => {
+    console.error(
+      "POWGUADIAN BOT ERROR:",
+      error
+    );
+  }
+);
 
 /* -------------------------------------------------------------------------- */
 /* START                                                                      */
@@ -689,14 +803,16 @@ const startBot =
     );
   };
 
-startBot().catch((error) => {
-  console.error(
-    "Failed to start POWGUADIAN:",
-    error
-  );
+startBot().catch(
+  (error) => {
+    console.error(
+      "Failed to start POWGUADIAN:",
+      error
+    );
 
-  process.exit(1);
-});
+    process.exit(1);
+  }
+);
 
 /* -------------------------------------------------------------------------- */
 /* GRACEFUL SHUTDOWN                                                          */
