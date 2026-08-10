@@ -1,7 +1,9 @@
 import { ethers } from "ethers";
 import { config } from "../config/env";
 
-const provider = new ethers.JsonRpcProvider(config.bscRpcUrl);
+const provider = new ethers.JsonRpcProvider(
+  config.bscRpcUrl
+);
 
 const ERC20_ABI = [
   "function owner() view returns (address)",
@@ -51,12 +53,8 @@ export interface SecurityResult {
   warnings: string[];
 }
 
-const isZeroAddress = (address: string): boolean => {
-  return (
-    address.toLowerCase() ===
-    ethers.ZeroAddress.toLowerCase()
-  );
-};
+const isZeroAddress = (address: string): boolean =>
+  address.toLowerCase() === ethers.ZeroAddress.toLowerCase();
 
 const hasFunction = (
   contract: ethers.Contract,
@@ -111,8 +109,7 @@ export const analyzeSecurity = async (
     return result;
   }
 
-  const normalizedAddress =
-    ethers.getAddress(address);
+  const normalizedAddress = ethers.getAddress(address);
 
   const contract = new ethers.Contract(
     normalizedAddress,
@@ -123,19 +120,20 @@ export const analyzeSecurity = async (
   /*
    * OWNERSHIP
    */
-
   if (hasFunction(contract, "owner()")) {
     try {
       const owner = await contract.owner();
 
-      if (typeof owner === "string" && ethers.isAddress(owner)) {
+      if (
+        typeof owner === "string" &&
+        ethers.isAddress(owner)
+      ) {
         result.owner = ethers.getAddress(owner);
 
-        if (isZeroAddress(owner)) {
-          result.ownerRenounced = true;
-        } else {
-          result.ownerRenounced = false;
+        result.ownerRenounced =
+          isZeroAddress(owner);
 
+        if (!result.ownerRenounced) {
           result.warnings.push(
             "Contract ownership appears to remain active."
           );
@@ -143,7 +141,7 @@ export const analyzeSecurity = async (
       }
     } catch {
       result.warnings.push(
-        "Ownership function was detected but could not be read."
+        "Ownership could not be verified."
       );
     }
   }
@@ -151,31 +149,28 @@ export const analyzeSecurity = async (
   /*
    * MINT
    */
+  result.canMint = hasFunction(
+    contract,
+    "mint(address,uint256)"
+  );
 
-  if (hasFunction(contract, "mint(address,uint256)")) {
-    result.canMint = true;
-
+  if (result.canMint) {
     result.warnings.push(
-      "A mint function is present in the detected interface."
+      "Mint functionality was detected."
     );
-  } else {
-    result.canMint = false;
   }
 
   /*
    * BURN
    */
-
-  if (hasFunction(contract, "burn(uint256)")) {
-    result.canBurn = true;
-  } else {
-    result.canBurn = false;
-  }
+  result.canBurn = hasFunction(
+    contract,
+    "burn(uint256)"
+  );
 
   /*
    * BLACKLIST
    */
-
   result.hasBlacklistFunction =
     hasFunction(
       contract,
@@ -188,14 +183,13 @@ export const analyzeSecurity = async (
 
   if (result.hasBlacklistFunction) {
     result.warnings.push(
-      "Blacklist-related functionality was detected."
+      "Blacklist functionality was detected."
     );
   }
 
   /*
    * TRADING CONTROL
    */
-
   result.hasTradingControl =
     hasFunction(
       contract,
@@ -217,79 +211,66 @@ export const analyzeSecurity = async (
   }
 
   /*
-   * TAX FUNCTIONS
+   * TAX / FEE FUNCTIONS
    */
+  const hasBuyTax =
+    hasFunction(contract, "buyTax()") ||
+    hasFunction(contract, "buyFee()");
+
+  const hasSellTax =
+    hasFunction(contract, "sellTax()") ||
+    hasFunction(contract, "sellFee()");
 
   result.hasTaxFunctions =
-    hasFunction(
-      contract,
-      "buyTax()"
-    ) ||
-    hasFunction(
-      contract,
-      "sellTax()"
-    ) ||
-    hasFunction(
-      contract,
-      "buyFee()"
-    ) ||
-    hasFunction(
-      contract,
-      "sellFee()"
-    );
+    hasBuyTax || hasSellTax;
 
   /*
-   * READ TAX VALUES
+   * READ BUY TAX
    */
-
-  if (
-    hasFunction(contract, "buyTax()")
+  if (hasFunction(contract, "buyTax()")) {
+    try {
+      result.buyTax = Number(
+        await contract.buyTax()
+      );
+    } catch {}
+  } else if (
+    hasFunction(contract, "buyFee()")
   ) {
     try {
-      result.buyTax =
-        Number(await contract.buyTax());
+      result.buyTax = Number(
+        await contract.buyFee()
+      );
     } catch {}
   }
 
-  if (
-    hasFunction(contract, "sellTax()")
-  ) {
+  /*
+   * READ SELL TAX
+   */
+  if (hasFunction(contract, "sellTax()")) {
     try {
-      result.sellTax =
-        Number(await contract.sellTax());
+      result.sellTax = Number(
+        await contract.sellTax()
+      );
     } catch {}
-  }
-
-  if (
-    hasFunction(contract, "buyFee()") &&
-    result.buyTax === null
+  } else if (
+    hasFunction(contract, "sellFee()")
   ) {
     try {
-      result.buyTax =
-        Number(await contract.buyFee());
-    } catch {}
-  }
-
-  if (
-    hasFunction(contract, "sellFee()") &&
-    result.sellTax === null
-  ) {
-    try {
-      result.sellTax =
-        Number(await contract.sellFee());
+      result.sellTax = Number(
+        await contract.sellFee()
+      );
     } catch {}
   }
 
   if (result.hasTaxFunctions) {
     result.warnings.push(
-      "Buy/sell fee or tax functionality was detected."
+      "Buy/sell tax or fee functionality was detected."
     );
   }
 
   /*
-   * PROXY DETECTION
+   * PROXY
    */
-
   const proxyContract = new ethers.Contract(
     normalizedAddress,
     PROXY_ABI,
@@ -306,6 +287,7 @@ export const analyzeSecurity = async (
       !isZeroAddress(implementation)
     ) {
       result.isProxy = true;
+
       result.implementation =
         ethers.getAddress(implementation);
 
@@ -314,53 +296,55 @@ export const analyzeSecurity = async (
       );
     }
   } catch {
-    /*
-     * Most normal ERC-20 contracts do not expose
-     * implementation().
-     */
+    result.isProxy = false;
   }
 
   /*
-   * BASIC RISK SCORE
+   * These cannot be reliably determined from
+   * simple ABI inspection alone.
+   *
+   * Keep them UNKNOWN instead of inventing data.
    */
+  result.isOpenSource = null;
+  result.isHoneypot = null;
+  result.transferTax = null;
+  result.maxTx = null;
+  result.maxWallet = null;
 
-  let riskScore = 0;
+  /*
+   * RISK SCORE
+   *
+   * Important:
+   * The presence of a function does NOT automatically
+   * mean the token is malicious.
+   *
+   * We therefore keep the score conservative.
+   */
+  let score = 0;
 
-  if (
-    result.ownerRenounced === false
-  ) {
-    riskScore += 1;
+  if (result.ownerRenounced === false) {
+    score += 1;
   }
 
   if (result.canMint === true) {
-    riskScore += 2;
+    score += 2;
   }
 
-  if (
-    result.hasBlacklistFunction === true
-  ) {
-    riskScore += 2;
+  if (result.hasBlacklistFunction === true) {
+    score += 2;
   }
 
-  if (
-    result.hasTradingControl === true
-  ) {
-    riskScore += 1;
+  if (result.hasTradingControl === true) {
+    score += 1;
   }
 
-  if (
-    result.hasTaxFunctions === true
-  ) {
-    riskScore += 1;
+  if (result.isProxy === true) {
+    score += 1;
   }
 
-  if (result.isProxy) {
-    riskScore += 1;
-  }
-
-  if (riskScore >= 5) {
+  if (score >= 5) {
     result.riskLevel = "HIGH";
-  } else if (riskScore >= 2) {
+  } else if (score >= 2) {
     result.riskLevel = "MEDIUM";
   } else {
     result.riskLevel = "LOW";
