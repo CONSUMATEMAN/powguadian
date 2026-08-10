@@ -1,0 +1,33 @@
+{
+  "name": "powguadian",
+  "version": "1.0.0",
+  "description": "POWGUADIAN BSC Token Intelligence Scanner and Telegram Bot",
+  "main": "src/index.ts",
+  "scripts": {
+    "dev": "tsx src/index.ts",
+    "start": "tsx src/index.ts",
+    "typecheck": "tsc --noEmit",
+    "test": "echo \"No tests configured\""
+  },
+  "keywords": [
+    "bsc",
+    "bnb-chain",
+    "token-scanner",
+    "telegram-bot",
+    "crypto",
+    "powguadian"
+  ],
+  "author": "",
+  "license": "ISC",
+  "type": "commonjs",
+  "dependencies": {
+    "dotenv": "^17.4.2",
+    "ethers": "^6.17.0",
+    "telegraf": "^4.16.3"
+  },
+  "devDependencies": {
+    "@types/node": "^26.2.0",
+    "tsx": "^4.23.11",
+    "typescript": "^7.0.2"
+  }
+}
