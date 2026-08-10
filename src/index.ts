@@ -1,3 +1,4 @@
+
 import { Telegraf } from "telegraf";
 import { config } from "./config/env";
 import {
@@ -6,13 +7,14 @@ import {
   ScanResult,
 } from "./services/scanner";
 import {
-  answerPowQuestion,
-  isPowRelated,
+  answerCommunityMessage,
+  isCommunityRelevant,
 } from "./services/moderator";
 
-const bot = new Telegraf(
-  config.telegramBotToken
-);
+const bot =
+  new Telegraf(
+    config.telegramBotToken
+  );
 
 /* -------------------------------------------------------------------------- */
 /* HELPERS                                                                    */
@@ -21,7 +23,10 @@ const bot = new Telegraf(
 const shortenAddress = (
   address: string
 ): string => {
-  if (!address || address.length < 12) {
+  if (
+    !address ||
+    address.length < 12
+  ) {
     return address;
   }
 
@@ -42,15 +47,21 @@ const formatNumber = (
     return "—";
   }
 
-  const number = Number(value);
+  const number =
+    Number(value);
 
-  if (!Number.isFinite(number)) {
+  if (
+    !Number.isFinite(number)
+  ) {
     return String(value);
   }
 
-  return number.toLocaleString("en-US", {
-    maximumFractionDigits: 4,
-  });
+  return number.toLocaleString(
+    "en-US",
+    {
+      maximumFractionDigits: 4,
+    }
+  );
 };
 
 const formatMoney = (
@@ -68,17 +79,28 @@ const formatMoney = (
     return "$0";
   }
 
-  if (Math.abs(value) < 0.000001) {
-    return `$${value.toExponential(4)}`;
+  if (
+    Math.abs(value) < 0.000001
+  ) {
+    return `$${value.toExponential(
+      4
+    )}`;
   }
 
-  if (Math.abs(value) < 0.01) {
-    return `$${value.toFixed(8)}`;
+  if (
+    Math.abs(value) < 0.01
+  ) {
+    return `$${value.toFixed(
+      8
+    )}`;
   }
 
-  return `$${value.toLocaleString("en-US", {
-    maximumFractionDigits: 2,
-  })}`;
+  return `$${value.toLocaleString(
+    "en-US",
+    {
+      maximumFractionDigits: 2,
+    }
+  )}`;
 };
 
 const formatPercent = (
@@ -92,7 +114,9 @@ const formatPercent = (
     return "—";
   }
 
-  return `${value.toFixed(2)}%`;
+  return `${value.toFixed(
+    2
+  )}%`;
 };
 
 const riskEmoji = (
@@ -120,45 +144,65 @@ const formatDate = (
     return "—";
   }
 
-  const parsed = new Date(date);
+  const parsed =
+    new Date(date);
 
-  if (Number.isNaN(parsed.getTime())) {
+  if (
+    Number.isNaN(
+      parsed.getTime()
+    )
+  ) {
     return date;
   }
 
-  return parsed.toLocaleDateString("en-GB", {
-    day: "2-digit",
-    month: "short",
-    year: "numeric",
-  });
+  return parsed.toLocaleDateString(
+    "en-GB",
+    {
+      day: "2-digit",
+      month: "short",
+      year: "numeric",
+    }
+  );
 };
 
 const formatRemaining = (
   remainingDays?: number | null
 ): string => {
   if (
-    remainingDays === undefined ||
+    remainingDays ===
+      undefined ||
     remainingDays === null ||
-    !Number.isFinite(remainingDays)
+    !Number.isFinite(
+      remainingDays
+    )
   ) {
     return "—";
   }
 
-  if (remainingDays <= 0) {
+  if (
+    remainingDays <= 0
+  ) {
     return "Expired";
   }
 
-  if (remainingDays < 1) {
+  if (
+    remainingDays < 1
+  ) {
     return `${Math.round(
       remainingDays * 24
     )}h`;
   }
 
-  return `${remainingDays.toFixed(1)}d`;
+  return `${remainingDays.toFixed(
+    1
+  )}d`;
 };
 
 const statusText = (
-  value: boolean | null | undefined,
+  value:
+    | boolean
+    | null
+    | undefined,
   positive = "Yes",
   negative = "No"
 ): string => {
@@ -180,14 +224,19 @@ const statusText = (
 const formatSecurity = (
   result: ScanResult
 ): string => {
-  const security = result.security;
+  const security =
+    result.security;
 
   if (!security) {
-    return `Security\nUnavailable`;
+    return (
+      `Security\n` +
+      `Unavailable`
+    );
   }
 
   const ownerText =
-    security.ownerRenounced === true
+    security.ownerRenounced ===
+    true
       ? "Renounced"
       : security.owner
         ? "Active"
@@ -195,15 +244,18 @@ const formatSecurity = (
 
   const honeypot =
     security.isHoneypot === null ||
-    security.isHoneypot === undefined
+    security.isHoneypot ===
+      undefined
       ? "Unknown"
       : security.isHoneypot
         ? "Possible"
         : "No indication";
 
   const openSource =
-    security.isOpenSource === null ||
-    security.isOpenSource === undefined
+    security.isOpenSource ===
+      null ||
+    security.isOpenSource ===
+      undefined
       ? "Unknown"
       : security.isOpenSource
         ? "Yes"
@@ -213,7 +265,10 @@ const formatSecurity = (
     `Security\n` +
     `Risk: ${riskEmoji(
       security.riskLevel
-    )} ${security.riskLevel ?? "UNKNOWN"}\n` +
+    )} ${
+      security.riskLevel ??
+      "UNKNOWN"
+    }\n` +
     `Owner: ${ownerText}\n` +
     `Mint: ${statusText(
       security.canMint,
@@ -241,19 +296,25 @@ const formatSecurity = (
       "No"
     )}\n` +
     `Proxy: ${
-      security.isProxy ? "Yes" : "No"
+      security.isProxy
+        ? "Yes"
+        : "No"
     }\n` +
     `Honeypot: ${honeypot}\n` +
     `Open source: ${openSource}\n` +
     `Buy tax: ${
-      security.buyTax !== null &&
-      security.buyTax !== undefined
+      security.buyTax !==
+        null &&
+      security.buyTax !==
+        undefined
         ? `${security.buyTax}%`
         : "—"
     }\n` +
     `Sell tax: ${
-      security.sellTax !== null &&
-      security.sellTax !== undefined
+      security.sellTax !==
+        null &&
+      security.sellTax !==
+        undefined
         ? `${security.sellTax}%`
         : "—"
     }`
@@ -276,7 +337,9 @@ const formatScanResult = (
     );
   }
 
-  if (result.type === "pair") {
+  if (
+    result.type === "pair"
+  ) {
     return (
       `🐾 POWGUADIAN\n` +
       `Liquidity Pair\n\n` +
@@ -298,7 +361,9 @@ const formatScanResult = (
     );
   }
 
-  if (result.type !== "token") {
+  if (
+    result.type !== "token"
+  ) {
     return (
       `🐾 POWGUADIAN\n\n` +
       `Smart Contract\n\n` +
@@ -306,18 +371,31 @@ const formatScanResult = (
     );
   }
 
-  const security = result.security;
-  const market = result.market;
-  const liquidity = result.liquidity;
-  const holders = result.holders;
+  const security =
+    result.security;
+
+  const market =
+    result.market;
+
+  const liquidity =
+    result.liquidity;
+
+  const holders =
+    result.holders;
 
   const risk =
-    security?.riskLevel ?? "UNKNOWN";
+    security?.riskLevel ??
+    "UNKNOWN";
 
   let response =
     `🐾 POWGUADIAN\n` +
-    `${result.name ?? "Unknown Token"} • ${
-      result.symbol ?? "TOKEN"
+    `${
+      result.name ??
+      "Unknown Token"
+    } ` +
+    `• ${
+      result.symbol ??
+      "TOKEN"
     }\n\n`;
 
   /* TOKEN */
@@ -370,7 +448,8 @@ const formatScanResult = (
   /* LIQUIDITY */
 
   const lpStatus =
-    liquidity?.status ?? "UNKNOWN";
+    liquidity?.status ??
+    "UNKNOWN";
 
   response +=
     `Liquidity\n` +
@@ -432,28 +511,36 @@ const formatScanResult = (
   response +=
     `Trading\n` +
     `Buy tax: ${
-      security?.buyTax !== null &&
-      security?.buyTax !== undefined
+      security?.buyTax !==
+          null &&
+      security?.buyTax !==
+          undefined
         ? `${security.buyTax}%`
         : "—"
     }\n` +
     `Sell tax: ${
-      security?.sellTax !== null &&
-      security?.sellTax !== undefined
+      security?.sellTax !==
+          null &&
+      security?.sellTax !==
+          undefined
         ? `${security.sellTax}%`
         : "—"
     }\n` +
     `Transfer tax: ${
-      security?.transferTax !== null &&
-      security?.transferTax !== undefined
+      security?.transferTax !==
+          null &&
+      security?.transferTax !==
+          undefined
         ? `${security.transferTax}%`
         : "—"
     }\n` +
     `Max TX: ${
-      security?.maxTx ?? "—"
+      security?.maxTx ??
+      "—"
     }\n` +
     `Max wallet: ${
-      security?.maxWallet ?? "—"
+      security?.maxWallet ??
+      "—"
     }\n\n`;
 
   /* SECURITY */
@@ -483,7 +570,9 @@ const formatScanResult = (
     `Links\n` +
     `BscScan: https://bscscan.com/address/${result.address}\n`;
 
-  if (market?.pairAddress) {
+  if (
+    market?.pairAddress
+  ) {
     response +=
       `DexScreener: https://dexscreener.com/bsc/${market.pairAddress}\n`;
   }
@@ -493,22 +582,28 @@ const formatScanResult = (
 
   /* SMART SUMMARY */
 
-  const observations: string[] = [];
+  const observations: string[] =
+    [];
 
-  if (security?.ownerRenounced) {
+  if (
+    security?.ownerRenounced
+  ) {
     observations.push(
       "Ownership is renounced."
     );
   }
 
-  if (security?.canMint === true) {
+  if (
+    security?.canMint === true
+  ) {
     observations.push(
       "Mint capability detected."
     );
   }
 
   if (
-    security?.hasBlacklistFunction === true
+    security?.hasBlacklistFunction ===
+    true
   ) {
     observations.push(
       "Blacklist functionality detected."
@@ -516,7 +611,8 @@ const formatScanResult = (
   }
 
   if (
-    security?.hasTradingControl === true
+    security?.hasTradingControl ===
+    true
   ) {
     observations.push(
       "Trading-control functionality detected."
@@ -524,7 +620,8 @@ const formatScanResult = (
   }
 
   if (
-    security?.hasTaxFunctions === true
+    security?.hasTaxFunctions ===
+    true
   ) {
     observations.push(
       "Tax or fee functionality detected."
@@ -532,7 +629,8 @@ const formatScanResult = (
   }
 
   if (
-    liquidity?.status === "BURNED"
+    liquidity?.status ===
+    "BURNED"
   ) {
     observations.push(
       "LP tokens appear to be burned."
@@ -540,15 +638,19 @@ const formatScanResult = (
   }
 
   if (
-    liquidity?.status === "EXPIRED"
+    liquidity?.status ===
+    "EXPIRED"
   ) {
     observations.push(
       "Liquidity lock appears expired."
     );
   }
 
-  if (observations.length > 0) {
-    response += `Analysis\n`;
+  if (
+    observations.length > 0
+  ) {
+    response +=
+      `Analysis\n`;
 
     for (
       const observation of observations
@@ -557,7 +659,8 @@ const formatScanResult = (
         `• ${observation}\n`;
     }
 
-    response += `\n`;
+    response +=
+      `\n`;
   }
 
   response +=
@@ -570,57 +673,60 @@ const formatScanResult = (
 /* SCANNING                                                                   */
 /* -------------------------------------------------------------------------- */
 
-const scanAddresses = async (
-  ctx: any,
-  addresses: string[]
-): Promise<void> => {
-  if (addresses.length === 0) {
-    await ctx.reply(
-      `🐾 POWGUADIAN\n\n` +
-      `I couldn't find a BSC contract address.\n\n` +
-      `Send a token CA, pair address, ` +
-      `or a BSC token link.`
-    );
-
-    return;
-  }
-
-  await ctx.reply(
-    `🔎 POWGUADIAN is analyzing...\n\n` +
-    `Market • Liquidity • Holders • Security`
-  );
-
-  for (
-    const address of addresses
-  ) {
-    try {
-      const result =
-        await scanContract(
-          address
-        );
-
-      await ctx.reply(
-        formatScanResult(
-          result
-        )
-      );
-    } catch (error) {
-      console.error(
-        `Failed to scan ${address}:`,
-        error
-      );
-
+const scanAddresses =
+  async (
+    ctx: any,
+    addresses: string[]
+  ): Promise<void> => {
+    if (
+      addresses.length === 0
+    ) {
       await ctx.reply(
         `🐾 POWGUADIAN\n\n` +
-        `Scan failed.\n\n` +
-        `Address: ${shortenAddress(
-          address
-        )}\n\n` +
-        `Please try again.`
+        `I couldn't find a BSC contract address.\n\n` +
+        `Send a token CA, pair address, ` +
+        `or a BSC token link.`
       );
+
+      return;
     }
-  }
-};
+
+    await ctx.reply(
+      `🔎 POWGUADIAN is analyzing...\n\n` +
+      `Market • Liquidity • Holders • Security`
+    );
+
+    for (
+      const address of addresses
+    ) {
+      try {
+        const result =
+          await scanContract(
+            address
+          );
+
+        await ctx.reply(
+          formatScanResult(
+            result
+          )
+        );
+      } catch (error) {
+        console.error(
+          `Failed to scan ${address}:`,
+          error
+        );
+
+        await ctx.reply(
+          `🐾 POWGUADIAN\n\n` +
+          `Scan failed.\n\n` +
+          `Address: ${shortenAddress(
+            address
+          )}\n\n` +
+          `Please try again.`
+        );
+      }
+    }
+  };
 
 /* -------------------------------------------------------------------------- */
 /* COMMANDS                                                                   */
@@ -631,8 +737,8 @@ bot.start(
     await ctx.reply(
       `🐾 POWGUADIAN\n\n` +
       `Your BSC token intelligence guardian.\n\n` +
-      `Ask me about POW or send me a ` +
-      `token contract address and I'll analyze it.\n\n` +
+      `Send me a token contract address ` +
+      `or token link and I'll analyze it.\n\n` +
       `Use /help for commands.`
     );
   }
@@ -646,15 +752,17 @@ bot.help(
       `/start — Start the bot\n` +
       `/help — Show commands\n` +
       `/scan — Scan a token\n\n` +
-      `AI POW Moderator\n\n` +
-      `Ask natural-language questions about POW.\n\n` +
       `Automatic scanning\n\n` +
       `Send a:\n` +
       `• Token contract\n` +
       `• Pair address\n` +
       `• PancakeSwap link\n` +
       `• BscScan link\n` +
-      `• DexScreener link`
+      `• DexScreener link\n\n` +
+      `Community moderator\n\n` +
+      `POWGUADIAN can also answer ` +
+      `community and crypto questions ` +
+      `when appropriate.`
     );
   }
 );
@@ -666,7 +774,9 @@ bot.command(
       ctx.message.text.trim();
 
     const addresses =
-      extractAddresses(text);
+      extractAddresses(
+        text
+      );
 
     await scanAddresses(
       ctx,
@@ -676,7 +786,46 @@ bot.command(
 );
 
 /* -------------------------------------------------------------------------- */
-/* POW AI MODERATOR + AUTOMATIC ADDRESS DETECTION                             */
+/* NEW MEMBER WELCOME                                                         */
+/* -------------------------------------------------------------------------- */
+
+bot.on(
+  "new_chat_members",
+  async (ctx) => {
+    try {
+      const members =
+        ctx.message
+          .new_chat_members;
+
+      for (
+        const member of members
+      ) {
+        const firstName =
+          member.first_name ||
+          "friend";
+
+        const username =
+          member.username
+            ? `@${member.username}`
+            : firstName;
+
+        await ctx.reply(
+          `Welcome ${username} 👋🐾\n\n` +
+          `Glad to have you with the POW community.\n` +
+          `Feel free to ask questions and join the conversation.`
+        );
+      }
+    } catch (error) {
+      console.error(
+        "Welcome message error:",
+        error
+      );
+    }
+  }
+);
+
+/* -------------------------------------------------------------------------- */
+/* COMMUNITY AI MODERATOR + AUTOMATIC SCANNER                                */
 /* -------------------------------------------------------------------------- */
 
 bot.on(
@@ -690,7 +839,7 @@ bot.on(
     }
 
     /*
-     * Ignore bot commands.
+     * Commands are handled separately.
      */
     if (
       text.startsWith("/")
@@ -699,11 +848,13 @@ bot.on(
     }
 
     /*
-     * Contract addresses and supported links
-     * always go directly to the scanner.
+     * Contract addresses always go directly
+     * to the scanner.
      */
     const addresses =
-      extractAddresses(text);
+      extractAddresses(
+        text
+      );
 
     if (
       addresses.length > 0
@@ -717,13 +868,17 @@ bot.on(
     }
 
     /*
-     * Normal conversation is ignored.
+     * Let the community intelligence layer
+     * decide whether this message deserves
+     * a moderator response.
      *
-     * The AI moderator only activates when
-     * the message appears to be related to POW.
+     * Normal conversation that does not
+     * need moderation is ignored.
      */
     if (
-      !isPowRelated(text)
+      !isCommunityRelevant(
+        text
+      )
     ) {
       return;
     }
@@ -734,11 +889,18 @@ bot.on(
       );
 
       const answer =
-        await answerPowQuestion(
+        await answerCommunityMessage(
           text
         );
 
-      if (!answer.trim()) {
+      /*
+       * The AI can deliberately decide
+       * that no response is necessary.
+       */
+      if (
+        !answer ||
+        answer === "[IGNORE]"
+      ) {
         return;
       }
 
@@ -747,12 +909,8 @@ bot.on(
       );
     } catch (error) {
       console.error(
-        "POW moderator error:",
+        "POW community moderator error:",
         error
-      );
-
-      await ctx.reply(
-        `POWGUADIAN couldn't process that question right now.`
       );
     }
   }
@@ -825,7 +983,9 @@ process.once(
       "🛑 POWGUADIAN stopping..."
     );
 
-    bot.stop("SIGINT");
+    bot.stop(
+      "SIGINT"
+    );
   }
 );
 
@@ -836,6 +996,8 @@ process.once(
       "🛑 POWGUADIAN stopping..."
     );
 
-    bot.stop("SIGTERM");
+    bot.stop(
+      "SIGTERM"
+    );
   }
 );
