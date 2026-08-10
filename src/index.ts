@@ -1,11 +1,13 @@
-
 import { Telegraf } from "telegraf";
+
 import { config } from "./config/env";
+
 import {
   extractAddresses,
   scanContract,
   ScanResult,
 } from "./services/scanner";
+
 import {
   answerCommunityMessage,
   isCommunityRelevant,
@@ -850,6 +852,9 @@ bot.on(
     /*
      * Contract addresses always go directly
      * to the scanner.
+     *
+     * This preserves the existing automatic
+     * scanning behavior.
      */
     const addresses =
       extractAddresses(
@@ -868,12 +873,11 @@ bot.on(
     }
 
     /*
-     * Let the community intelligence layer
-     * decide whether this message deserves
-     * a moderator response.
+     * The community intelligence layer decides
+     * whether the message deserves an answer.
      *
-     * Normal conversation that does not
-     * need moderation is ignored.
+     * Ordinary messages that don't need moderation
+     * are ignored.
      */
     if (
       !isCommunityRelevant(
