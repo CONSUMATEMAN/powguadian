@@ -1,3 +1,4 @@
+
 import { ethers } from "ethers";
 import { config } from "../config/env";
 import {
@@ -227,13 +228,9 @@ export interface ScanResult {
   reserve1?: string;
 
   security?: SecurityResult;
-
   market?: MarketData;
-
   liquidity?: LPData;
-
   holders?: HolderData;
-
   socials?: SocialLinks;
 
   sourceVerified?: boolean;
@@ -241,86 +238,82 @@ export interface ScanResult {
   launchTime?: number | null;
 }
 
-const emptySocialLinks =
-  (): SocialLinks => ({
-    website: null,
-    telegram: null,
-    twitter: null,
-    discord: null,
-    github: null,
-    youtube: null,
-    instagram: null,
-    facebook: null,
-    tiktok: null,
-  });
+const emptySocialLinks = (): SocialLinks => ({
+  website: null,
+  telegram: null,
+  twitter: null,
+  discord: null,
+  github: null,
+  youtube: null,
+  instagram: null,
+  facebook: null,
+  tiktok: null,
+});
 
-const emptyMarketData =
-  (): MarketData => ({
-    priceUsd: null,
-    marketCap: null,
-    liquidityUsd: null,
+const emptyMarketData = (): MarketData => ({
+  priceUsd: null,
+  marketCap: null,
+  liquidityUsd: null,
 
-    volume24h: null,
-    buys24h: null,
-    sells24h: null,
-    uniqueTraders: null,
+  volume24h: null,
+  buys24h: null,
+  sells24h: null,
+  uniqueTraders: null,
 
-    pairAddress: null,
-    dex: null,
-    pairLabel: null,
+  pairAddress: null,
+  dex: null,
+  pairLabel: null,
 
-    pairCreatedAt: null,
+  pairCreatedAt: null,
 
-    priceNative: null,
+  priceNative: null,
 
-    lpBnb: null,
-    lpRatio: null,
+  lpBnb: null,
+  lpRatio: null,
 
-    tokenReserve: null,
-    tokenInPoolPercent: null,
+  tokenReserve: null,
+  tokenInPoolPercent: null,
 
-    website: null,
-    telegram: null,
-    twitter: null,
-    discord: null,
-    github: null,
-    youtube: null,
-    instagram: null,
-    facebook: null,
-    tiktok: null,
-  });
+  website: null,
+  telegram: null,
+  twitter: null,
+  discord: null,
+  github: null,
+  youtube: null,
+  instagram: null,
+  facebook: null,
+  tiktok: null,
+});
 
-const emptyLPData =
-  (): LPData => ({
-    status: "UNKNOWN",
+const emptyLPData = (): LPData => ({
+  status: "UNKNOWN",
 
-    lockedUntil: null,
-    durationDays: null,
-    remainingDays: null,
+  lockedUntil: null,
+  durationDays: null,
+  remainingDays: null,
 
-    lpBurned: false,
-    lpBurnPercent: null,
+  lpBurned: false,
+  lpBurnPercent: null,
 
-    lpAmount: null,
-    lpTotalSupply: null,
+  lpAmount: null,
+  lpTotalSupply: null,
 
-    lockProvider: null,
-  });
+  lockProvider: null,
+});
 
-const emptyHolderData =
-  (): HolderData => ({
-    holders: null,
+const emptyHolderData = (): HolderData => ({
+  holders: null,
 
-    top1: null,
-    top5: null,
-    top10: null,
-    top20: null,
+  top1: null,
+  top5: null,
+  top10: null,
+  top20: null,
 
-    topHolders: [],
+  topHolders: [],
 
-    burnedPercent: null,
-    ownerHoldingsPercent: null,
-  });
+  burnedPercent: null,
+  ownerHoldingsPercent: null,
+});
 
 export const extractAddresses = (
   text: string
@@ -333,9 +326,7 @@ export const extractAddresses = (
   const uniqueAddresses =
     new Set<string>();
 
-  for (
-    const address of matches
-  ) {
+  for (const address of matches) {
     try {
       uniqueAddresses.add(
         ethers.getAddress(address)
@@ -350,16 +341,15 @@ export const extractAddresses = (
   );
 };
 
-const getBscScanApiKey =
-  (): string | null => {
-    const key =
-      process.env.BSCSCAN_API_KEY;
+const getBscScanApiKey = (): string | null => {
+  const key =
+    process.env.BSCSCAN_API_KEY;
 
-    return key &&
-      key.trim().length > 0
-      ? key.trim()
-      : null;
-  };
+  return key &&
+    key.trim().length > 0
+    ? key.trim()
+    : null;
+};
 
 const detectPair = async (
   address: string
@@ -485,15 +475,6 @@ const fetchDexScreenerData =
           ? Number(pair.priceNative)
           : null;
 
-      /*
-       * Prefer actual market cap.
-       *
-       * If DexScreener doesn't provide it,
-       * calculate it from price × total supply.
-       *
-       * Do NOT silently use FDV as market cap.
-       */
-
       if (
         pair?.marketCap != null &&
         Number.isFinite(
@@ -566,11 +547,9 @@ const fetchDexScreenerData =
             )
           : null;
 
-      const websites =
-        pair?.info?.websites ?? [];
-
       for (
-        const website of websites
+        const website of
+          pair?.info?.websites ?? []
       ) {
         if (
           website?.url &&
@@ -581,11 +560,9 @@ const fetchDexScreenerData =
         }
       }
 
-      const socials =
-        pair?.info?.socials ?? [];
-
       for (
-        const social of socials
+        const social of
+          pair?.info?.socials ?? []
       ) {
         if (!social?.url) {
           continue;
@@ -597,9 +574,7 @@ const fetchDexScreenerData =
           ).toLowerCase();
 
         if (
-          type.includes(
-            "telegram"
-          ) &&
+          type.includes("telegram") &&
           !market.telegram
         ) {
           market.telegram =
@@ -608,9 +583,7 @@ const fetchDexScreenerData =
 
         if (
           (
-            type.includes(
-              "twitter"
-            ) ||
+            type.includes("twitter") ||
             type === "x"
           ) &&
           !market.twitter
@@ -620,9 +593,7 @@ const fetchDexScreenerData =
         }
 
         if (
-          type.includes(
-            "discord"
-          ) &&
+          type.includes("discord") &&
           !market.discord
         ) {
           market.discord =
@@ -630,9 +601,7 @@ const fetchDexScreenerData =
         }
 
         if (
-          type.includes(
-            "github"
-          ) &&
+          type.includes("github") &&
           !market.github
         ) {
           market.github =
@@ -640,9 +609,7 @@ const fetchDexScreenerData =
         }
 
         if (
-          type.includes(
-            "youtube"
-          ) &&
+          type.includes("youtube") &&
           !market.youtube
         ) {
           market.youtube =
@@ -650,9 +617,7 @@ const fetchDexScreenerData =
         }
 
         if (
-          type.includes(
-            "instagram"
-          ) &&
+          type.includes("instagram") &&
           !market.instagram
         ) {
           market.instagram =
@@ -660,9 +625,7 @@ const fetchDexScreenerData =
         }
 
         if (
-          type.includes(
-            "facebook"
-          ) &&
+          type.includes("facebook") &&
           !market.facebook
         ) {
           market.facebook =
@@ -670,9 +633,7 @@ const fetchDexScreenerData =
         }
 
         if (
-          type.includes(
-            "tiktok"
-          ) &&
+          type.includes("tiktok") &&
           !market.tiktok
         ) {
           market.tiktok =
@@ -689,7 +650,8 @@ const fetchDexScreenerData =
           (
             market.liquidityUsd /
             market.marketCap
-          ) * 100;
+          ) *
+          100;
       }
 
       if (
@@ -826,7 +788,8 @@ const enrichPairData =
               (
                 market.tokenReserve /
                 supply
-              ) * 100;
+              ) *
+              100;
           }
         }
       }
@@ -861,8 +824,8 @@ const getContractSource =
         "https://api.bscscan.com/api" +
         `?module=contract` +
         `&action=getsourcecode` +
-        `&address=${address}` +
-        `&apikey=${apiKey}`;
+        `&address=${encodeURIComponent(address)}` +
+        `&apikey=${encodeURIComponent(apiKey)}`;
 
       const response =
         await fetch(url);
@@ -929,7 +892,8 @@ const extractSocialLinks =
       ) ?? [];
 
     for (
-      const rawUrl of urls
+      const rawUrl of
+        urls
     ) {
       const url =
         rawUrl.replace(
@@ -942,26 +906,23 @@ const extractSocialLinks =
 
       if (
         (
-          lower.includes(
-            "twitter.com"
-          ) ||
-          lower.includes(
-            "x.com"
-          )
+          lower.includes("twitter.com") ||
+          lower.includes("x.com")
         ) &&
         !result.twitter
       ) {
         result.twitter =
           url;
       } else if (
-        lower.includes("t.me") ||
-        lower.includes("telegram.me") ||
-        lower.includes("telegram.")
+        (
+          lower.includes("t.me") ||
+          lower.includes("telegram.me") ||
+          lower.includes("telegram.")
+        ) &&
+        !result.telegram
       ) {
-        if (!result.telegram) {
-          result.telegram =
-            url;
-        }
+        result.telegram =
+          url;
       } else if (
         lower.includes("discord") &&
         !result.discord
@@ -976,49 +937,35 @@ const extractSocialLinks =
           url;
       } else if (
         (
-          lower.includes(
-            "youtube.com"
-          ) ||
-          lower.includes(
-            "youtu.be"
-          )
+          lower.includes("youtube.com") ||
+          lower.includes("youtu.be")
         ) &&
         !result.youtube
       ) {
         result.youtube =
           url;
       } else if (
-        lower.includes(
-          "instagram.com"
-        ) &&
+        lower.includes("instagram.com") &&
         !result.instagram
       ) {
         result.instagram =
           url;
       } else if (
-        lower.includes(
-          "facebook.com"
-        ) &&
+        lower.includes("facebook.com") &&
         !result.facebook
       ) {
         result.facebook =
           url;
       } else if (
-        lower.includes(
-          "tiktok.com"
-        ) &&
+        lower.includes("tiktok.com") &&
         !result.tiktok
       ) {
         result.tiktok =
           url;
       } else if (
         !result.website &&
-        !lower.includes(
-          "bscscan.com"
-        ) &&
-        !lower.includes(
-          "etherscan.io"
-        )
+        !lower.includes("bscscan.com") &&
+        !lower.includes("etherscan.io")
       ) {
         result.website =
           url;
@@ -1091,7 +1038,8 @@ const getUnlockTime =
       ];
 
       for (
-        const method of methods
+        const method of
+          methods
       ) {
         try {
           const value =
@@ -1109,7 +1057,7 @@ const getUnlockTime =
             return timestamp;
           }
         } catch {
-          // Try next common locker method.
+          // Try next method.
         }
       }
     } catch {
@@ -1137,10 +1085,10 @@ const getBscScanHolders =
         "https://api.bscscan.com/api" +
         `?module=token` +
         `&action=tokenholderlist` +
-        `&contractaddress=${tokenAddress}` +
+        `&contractaddress=${encodeURIComponent(tokenAddress)}` +
         `&page=${page}` +
         `&offset=${offset}` +
-        `&apikey=${apiKey}`;
+        `&apikey=${encodeURIComponent(apiKey)}`;
 
       const response =
         await fetch(url);
@@ -1227,7 +1175,7 @@ const analyzeLP =
         const burnPercent =
           Number(
             ethers.formatUnits(
-              burnedBalance * 10000n /
+              (burnedBalance * 10000n) /
                 lpSupply,
               2
             )
@@ -1260,11 +1208,12 @@ const analyzeLP =
         await getBscScanHolders(
           market.pairAddress,
           1,
-          20
+          50
         );
 
       for (
-        const holder of holders
+        const holder of
+          holders
       ) {
         const holderAddress =
           holder.TokenHolderAddress ??
@@ -1353,15 +1302,10 @@ const analyzeLP =
           result.remainingDays =
             result.durationDays;
 
-          if (
+          result.status =
             unlockTime > now
-          ) {
-            result.status =
-              "LOCKED";
-          } else {
-            result.status =
-              "EXPIRED";
-          }
+              ? "LOCKED"
+              : "EXPIRED";
 
           result.lockProvider =
             normalizedHolder;
@@ -1406,8 +1350,8 @@ const analyzeHolders =
         "https://api.bscscan.com/api" +
         `?module=token` +
         `&action=tokenholdercount` +
-        `&contractaddress=${tokenAddress}` +
-        `&apikey=${apiKey}`;
+        `&contractaddress=${encodeURIComponent(tokenAddress)}` +
+        `&apikey=${encodeURIComponent(apiKey)}`;
 
       const countResponse =
         await fetch(countUrl);
@@ -1443,7 +1387,7 @@ const analyzeHolders =
         await getBscScanHolders(
           tokenAddress,
           1,
-          20
+          50
         );
 
       const supply =
@@ -1476,9 +1420,6 @@ const analyzeHolders =
 
       const topHolders:
         TopHolder[] = [];
-
-      let runningPercent =
-        0;
 
       for (
         const holder of
@@ -1515,11 +1456,8 @@ const analyzeHolders =
           continue;
         }
 
-        const rawBalance =
-          Number(quantity);
-
         const balance =
-          rawBalance /
+          Number(quantity) /
           10 ** decimals;
 
         if (
@@ -1534,7 +1472,8 @@ const analyzeHolders =
           (
             balance /
             supply
-          ) * 100;
+          ) *
+          100;
 
         if (
           !Number.isFinite(
@@ -1549,9 +1488,6 @@ const analyzeHolders =
             normalized,
           percent,
         });
-
-        runningPercent +=
-          percent;
 
         if (
           topHolders.length >=
@@ -1589,7 +1525,14 @@ const analyzeHolders =
           );
 
       result.top20 =
-        runningPercent;
+        topHolders
+          .slice(0, 20)
+          .reduce(
+            (sum, holder) =>
+              sum +
+              holder.percent,
+            0
+          );
 
       let burned = 0;
 
@@ -1642,7 +1585,8 @@ const analyzeHolders =
           (
             burned /
             supply
-          ) * 100;
+          ) *
+          100;
       }
 
       if (
@@ -1682,7 +1626,8 @@ const analyzeHolders =
                 (
                   balance /
                   supply
-                ) * 100;
+                ) *
+                100;
             }
 
             break;
@@ -1716,9 +1661,6 @@ const readToken =
         provider
       );
 
-    let hasTokenData =
-      false;
-
     const result: {
       name?: string;
       symbol?: string;
@@ -1733,7 +1675,7 @@ const readToken =
       result.name =
         await token.name();
 
-      hasTokenData =
+      result.hasTokenData =
         true;
     } catch {
       // Ignore.
@@ -1743,7 +1685,7 @@ const readToken =
       result.symbol =
         await token.symbol();
 
-      hasTokenData =
+      result.hasTokenData =
         true;
     } catch {
       // Ignore.
@@ -1755,7 +1697,7 @@ const readToken =
           await token.decimals()
         );
 
-      hasTokenData =
+      result.hasTokenData =
         true;
     } catch {
       // Ignore.
@@ -1779,16 +1721,144 @@ const readToken =
           supply.toString();
       }
 
-      hasTokenData =
+      result.hasTokenData =
         true;
     } catch {
       // Ignore.
     }
 
-    result.hasTokenData =
-      hasTokenData;
-
     return result;
+  };
+
+const buildTokenResult =
+  async (
+    normalizedAddress: string,
+    tokenData: Awaited<
+      ReturnType<typeof readToken>
+    >,
+    pairData?: {
+      token0: string;
+      token1: string;
+      reserve0: bigint;
+      reserve1: bigint;
+    }
+  ): Promise<ScanResult> => {
+    const security =
+      await analyzeSecurity(
+        normalizedAddress
+      );
+
+    const market =
+      await fetchDexScreenerData(
+        normalizedAddress,
+        tokenData.totalSupply,
+        tokenData.decimals
+      );
+
+    const liquidity =
+      await analyzeLP(
+        market
+      );
+
+    const holders =
+      tokenData.totalSupply &&
+      tokenData.decimals !==
+        undefined
+        ? await analyzeHolders(
+            normalizedAddress,
+            tokenData.totalSupply,
+            tokenData.decimals,
+            security.owner,
+            market.pairAddress
+          )
+        : emptyHolderData();
+
+    const source =
+      await getContractSource(
+        normalizedAddress
+      );
+
+    const sourceSocials =
+      extractSocialLinks(
+        source.sourceCode
+      );
+
+    const marketSocials:
+      SocialLinks = {
+      website:
+        market.website,
+      telegram:
+        market.telegram,
+      twitter:
+        market.twitter,
+      discord:
+        market.discord,
+      github:
+        market.github,
+      youtube:
+        market.youtube,
+      instagram:
+        market.instagram,
+      facebook:
+        market.facebook,
+      tiktok:
+        market.tiktok,
+    };
+
+    const socials =
+      mergeSocialLinks(
+        marketSocials,
+        sourceSocials
+      );
+
+    return {
+      address:
+        normalizedAddress,
+
+      isContract: true,
+
+      type: "token",
+
+      name:
+        tokenData.name,
+
+      symbol:
+        tokenData.symbol,
+
+      decimals:
+        tokenData.decimals,
+
+      totalSupply:
+        tokenData.totalSupply,
+
+      token0:
+        pairData?.token0,
+
+      token1:
+        pairData?.token1,
+
+      reserve0:
+        pairData?.reserve0.toString(),
+
+      reserve1:
+        pairData?.reserve1.toString(),
+
+      security,
+
+      market,
+
+      liquidity,
+
+      holders,
+
+      socials,
+
+      sourceVerified:
+        source.verified,
+
+      launchTime:
+        market.pairCreatedAt,
+    };
   };
 
 export const scanContract =
@@ -1804,9 +1874,7 @@ export const scanContract =
     }
 
     const normalizedAddress =
-      ethers.getAddress(
-        address
-      );
+      ethers.getAddress(address);
 
     const code =
       await provider.getCode(
@@ -1823,10 +1891,6 @@ export const scanContract =
         type: "unknown",
       };
     }
-
-    /*
-     * Detect pair first.
-     */
 
     const pairData =
       await detectPair(
@@ -1850,129 +1914,11 @@ export const scanContract =
       if (
         tokenData.hasTokenData
       ) {
-        const security =
-          await analyzeSecurity(
-            tokenAddress
-          );
-
-        const market =
-          await fetchDexScreenerData(
-            tokenAddress,
-            tokenData.totalSupply,
-            tokenData.decimals
-          );
-
-        const liquidity =
-          await analyzeLP(
-            market
-          );
-
-        const holders =
-          tokenData.totalSupply &&
-          tokenData.decimals !==
-            undefined
-            ? await analyzeHolders(
-                tokenAddress,
-                tokenData.totalSupply,
-                tokenData.decimals,
-                security.owner,
-                market.pairAddress
-              )
-            : emptyHolderData();
-
-        const source =
-          await getContractSource(
-            tokenAddress
-          );
-
-        const sourceSocials =
-          extractSocialLinks(
-            source.sourceCode
-          );
-
-        const marketSocials:
-          SocialLinks = {
-          website:
-            market.website,
-          telegram:
-            market.telegram,
-          twitter:
-            market.twitter,
-          discord:
-            market.discord,
-          github:
-            market.github,
-          youtube:
-            market.youtube,
-          instagram:
-            market.instagram,
-          facebook:
-            market.facebook,
-          tiktok:
-            market.tiktok,
-        };
-
-        const socials =
-          mergeSocialLinks(
-            marketSocials,
-            sourceSocials
-          );
-
-        return {
-          address:
-            tokenAddress,
-
-          isContract: true,
-
-          type: "token",
-
-          name:
-            tokenData.name,
-
-          symbol:
-            tokenData.symbol,
-
-          decimals:
-            tokenData.decimals,
-
-          totalSupply:
-            tokenData.totalSupply,
-
-          token0:
-            pairData.token0,
-
-          token1:
-            pairData.token1,
-
-          reserve0:
-            pairData.reserve0.toString(),
-
-          reserve1:
-            pairData.reserve1.toString(),
-
-          security,
-
-          market:
-            market.pairAddress
-              ? market
-              : {
-                  ...market,
-                  pairAddress:
-                    normalizedAddress,
-                },
-
-          liquidity,
-
-          holders,
-
-          socials,
-
-          sourceVerified:
-            source.verified,
-
-          launchTime:
-            market.pairCreatedAt,
-        };
+        return buildTokenResult(
+          tokenAddress,
+          tokenData,
+          pairData
+        );
       }
 
       return {
@@ -1997,10 +1943,6 @@ export const scanContract =
       };
     }
 
-    /*
-     * Normal token contract.
-     */
-
     const tokenData =
       await readToken(
         normalizedAddress
@@ -2009,110 +1951,10 @@ export const scanContract =
     if (
       tokenData.hasTokenData
     ) {
-      const security =
-        await analyzeSecurity(
-          normalizedAddress
-        );
-
-      const market =
-        await fetchDexScreenerData(
-          normalizedAddress,
-          tokenData.totalSupply,
-          tokenData.decimals
-        );
-
-      const liquidity =
-        await analyzeLP(
-          market
-        );
-
-      const holders =
-        tokenData.totalSupply &&
-        tokenData.decimals !==
-          undefined
-          ? await analyzeHolders(
-              normalizedAddress,
-              tokenData.totalSupply,
-              tokenData.decimals,
-              security.owner,
-              market.pairAddress
-            )
-          : emptyHolderData();
-
-      const source =
-        await getContractSource(
-          normalizedAddress
-        );
-
-      const sourceSocials =
-        extractSocialLinks(
-          source.sourceCode
-        );
-
-      const marketSocials:
-        SocialLinks = {
-        website:
-          market.website,
-        telegram:
-          market.telegram,
-        twitter:
-          market.twitter,
-        discord:
-          market.discord,
-        github:
-          market.github,
-        youtube:
-          market.youtube,
-        instagram:
-          market.instagram,
-        facebook:
-          market.facebook,
-        tiktok:
-          market.tiktok,
-      };
-
-      const socials =
-        mergeSocialLinks(
-          marketSocials,
-          sourceSocials
-        );
-
-      return {
-        address:
-          normalizedAddress,
-
-        isContract: true,
-
-        type: "token",
-
-        name:
-          tokenData.name,
-
-        symbol:
-          tokenData.symbol,
-
-        decimals:
-          tokenData.decimals,
-
-        totalSupply:
-          tokenData.totalSupply,
-
-        security,
-
-        market,
-
-        liquidity,
-
-        holders,
-
-        socials,
-
-        sourceVerified:
-          source.verified,
-
-        launchTime:
-          market.pairCreatedAt,
-      };
+      return buildTokenResult(
+        normalizedAddress,
+        tokenData
+      );
     }
 
     return {

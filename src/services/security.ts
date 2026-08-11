@@ -22,12 +22,6 @@ export interface SecurityResult {
   buyTax: number | null;
   sellTax: number | null;
 
-  /*
-   * Compatibility fields used by the moderator.
-   *
-   * These are derived from the existing security
-   * analysis and do not require a separate scan.
-   */
   canBurn: boolean;
   hasTaxFunctions: boolean;
   isHoneypot: boolean;
@@ -109,8 +103,8 @@ const getContractSource = async (
       "https://api.bscscan.com/api" +
       `?module=contract` +
       `&action=getsourcecode` +
-      `&address=${address}` +
-      `&apikey=${apiKey}`;
+      `&address=${encodeURIComponent(address)}` +
+      `&apikey=${encodeURIComponent(apiKey)}`;
 
     const response = await fetch(url);
 
@@ -145,16 +139,13 @@ const getContractSource = async (
     const implementation =
       item.Implementation &&
       ethers.isAddress(item.Implementation)
-        ? ethers.getAddress(
-            item.Implementation
-          )
+        ? ethers.getAddress(item.Implementation)
         : null;
 
     return {
       verified: source.trim().length > 0,
       sourceCode: source,
-      contractName:
-        item.ContractName ?? null,
+      contractName: item.ContractName ?? null,
       proxy,
       implementation,
     };
@@ -185,19 +176,16 @@ const readOwner = async (
 
   for (const method of methods) {
     try {
-      const value =
-        await contract[method]();
+      const value = await contract[method]();
 
       if (
         typeof value === "string" &&
         ethers.isAddress(value)
       ) {
-        return ethers.getAddress(
-          value
-        );
+        return ethers.getAddress(value);
       }
     } catch {
-      // Try next method.
+      // Try the next method.
     }
   }
 
@@ -251,68 +239,63 @@ const detectSecurityFeatures = (
     /\bERC20Burnable\b/i,
   ]);
 
-  const hasBlacklistFunction =
-    sourceHas(source, [
-      /\bblacklist\b/i,
-      /\bblacklisted\b/i,
-      /\b_isBlacklisted\b/i,
-      /\bsetBlacklist\b/i,
-      /\baddToBlacklist\b/i,
-      /\bremoveFromBlacklist\b/i,
-      /\bblocked\b/i,
-    ]);
+  const hasBlacklistFunction = sourceHas(source, [
+    /\bblacklist\b/i,
+    /\bblacklisted\b/i,
+    /\b_isBlacklisted\b/i,
+    /\bsetBlacklist\b/i,
+    /\baddToBlacklist\b/i,
+    /\bremoveFromBlacklist\b/i,
+    /\bblocked\b/i,
+  ]);
 
-  const hasWhitelistFunction =
-    sourceHas(source, [
-      /\bwhitelist\b/i,
-      /\bwhitelisted\b/i,
-      /\b_isWhitelisted\b/i,
-      /\bsetWhitelist\b/i,
-      /\baddToWhitelist\b/i,
-      /\bremoveFromWhitelist\b/i,
-    ]);
+  const hasWhitelistFunction = sourceHas(source, [
+    /\bwhitelist\b/i,
+    /\bwhitelisted\b/i,
+    /\b_isWhitelisted\b/i,
+    /\bsetWhitelist\b/i,
+    /\baddToWhitelist\b/i,
+    /\bremoveFromWhitelist\b/i,
+  ]);
 
-  const hasTradingControl =
-    sourceHas(source, [
-      /\btradingOpen\b/i,
-      /\btradingEnabled\b/i,
-      /\btradingActive\b/i,
-      /\bopenTrading\b/i,
-      /\bsetTrading\b/i,
-      /\bstartTrading\b/i,
-      /\benableTrading\b/i,
-      /\bdisableTrading\b/i,
-      /\btrading\b/i,
-      /\bcanTrade\b/i,
-    ]);
+  const hasTradingControl = sourceHas(source, [
+    /\btradingOpen\b/i,
+    /\btradingEnabled\b/i,
+    /\btradingActive\b/i,
+    /\bopenTrading\b/i,
+    /\bsetTrading\b/i,
+    /\bstartTrading\b/i,
+    /\benableTrading\b/i,
+    /\bdisableTrading\b/i,
+    /\bcanTrade\b/i,
+    /\btrading\b/i,
+  ]);
 
-  const isPausable =
-    sourceHas(source, [
-      /\bPausable\b/i,
-      /\bwhenNotPaused\b/i,
-      /\bwhenPaused\b/i,
-      /\bfunction\s+pause\s*\(/i,
-      /\bfunction\s+unpause\s*\(/i,
-      /\b_pause\s*\(/i,
-      /\b_unpause\s*\(/i,
-    ]);
+  const isPausable = sourceHas(source, [
+    /\bPausable\b/i,
+    /\bwhenNotPaused\b/i,
+    /\bwhenPaused\b/i,
+    /\bfunction\s+pause\s*\(/i,
+    /\bfunction\s+unpause\s*\(/i,
+    /\b_pause\s*\(/i,
+    /\b_unpause\s*\(/i,
+  ]);
 
-  const hasTaxFunctions =
-    sourceHas(source, [
-      /\bbuyTax\b/i,
-      /\bsellTax\b/i,
-      /\bbuyFee\b/i,
-      /\bsellFee\b/i,
-      /\bbuyFees\b/i,
-      /\bsellFees\b/i,
-      /\bBUY_TAX\b/i,
-      /\bSELL_TAX\b/i,
-      /\bBUY_FEE\b/i,
-      /\bSELL_FEE\b/i,
-      /\btaxFee\b/i,
-      /\btransferTax\b/i,
-      /\bfee\b/i,
-    ]);
+  const hasTaxFunctions = sourceHas(source, [
+    /\bbuyTax\b/i,
+    /\bsellTax\b/i,
+    /\bbuyFee\b/i,
+    /\bsellFee\b/i,
+    /\bbuyFees\b/i,
+    /\bsellFees\b/i,
+    /\bBUY_TAX\b/i,
+    /\bSELL_TAX\b/i,
+    /\bBUY_FEE\b/i,
+    /\bSELL_FEE\b/i,
+    /\btaxFee\b/i,
+    /\btransferTax\b/i,
+    /\bfee\b/i,
+  ]);
 
   return {
     canMint,
@@ -355,9 +338,7 @@ const extractTaxValue = (
     ];
 
     for (const pattern of patterns) {
-      const match = source.match(
-        pattern
-      );
+      const match = source.match(pattern);
 
       if (!match) {
         continue;
@@ -384,9 +365,8 @@ const detectTaxes = (
   buyTax: number | null;
   sellTax: number | null;
 } => {
-  const buyTax = extractTaxValue(
-    source,
-    [
+  return {
+    buyTax: extractTaxValue(source, [
       "buyTax",
       "buyFee",
       "buyFees",
@@ -395,12 +375,9 @@ const detectTaxes = (
       "_buyFee",
       "BUY_TAX",
       "BUY_FEE",
-    ]
-  );
+    ]),
 
-  const sellTax = extractTaxValue(
-    source,
-    [
+    sellTax: extractTaxValue(source, [
       "sellTax",
       "sellFee",
       "sellFees",
@@ -409,360 +386,304 @@ const detectTaxes = (
       "_sellFee",
       "SELL_TAX",
       "SELL_FEE",
-    ]
-  );
-
-  return {
-    buyTax,
-    sellTax,
+    ]),
   };
 };
 
 const detectTransferTax = (
   source: string
 ): number | null => {
-  return extractTaxValue(
-    source,
-    [
-      "transferTax",
-      "transferFee",
-      "transferFees",
-      "_transferTax",
-      "_transferFee",
-      "TRANSFER_TAX",
-      "TRANSFER_FEE",
-    ]
-  );
+  return extractTaxValue(source, [
+    "transferTax",
+    "transferFee",
+    "transferFees",
+    "_transferTax",
+    "_transferFee",
+    "TRANSFER_TAX",
+    "TRANSFER_FEE",
+  ]);
 };
 
-export const analyzeSecurity =
-  async (
-    address: string
-  ): Promise<SecurityResult> => {
-    const result =
-      emptySecurityResult();
+export const analyzeSecurity = async (
+  address: string
+): Promise<SecurityResult> => {
+  const result = emptySecurityResult();
 
-    if (!ethers.isAddress(address)) {
+  if (!ethers.isAddress(address)) {
+    return result;
+  }
+
+  const normalizedAddress =
+    ethers.getAddress(address);
+
+  try {
+    const code = await provider.getCode(
+      normalizedAddress
+    );
+
+    if (code === "0x") {
       return result;
     }
 
-    const normalizedAddress =
-      ethers.getAddress(address);
+    const source = await getContractSource(
+      normalizedAddress
+    );
 
-    try {
-      const code =
-        await provider.getCode(
-          normalizedAddress
-        );
+    result.sourceVerified =
+      source.verified;
 
-      if (code === "0x") {
-        return result;
-      }
+    result.isOpenSource =
+      source.verified;
 
-      const source =
-        await getContractSource(
-          normalizedAddress
-        );
+    result.isProxy =
+      source.proxy;
 
-      result.sourceVerified =
-        source.verified;
-
-      result.isOpenSource =
-        source.verified;
-
-      result.isProxy =
-        source.proxy;
-
-      const detected =
-        detectSecurityFeatures(
-          source.sourceCode
-        );
-
-      result.canMint =
-        detected.canMint;
-
-      result.canBurn =
-        detected.canBurn;
-
-      result.hasBlacklistFunction =
-        detected.hasBlacklistFunction;
-
-      result.hasWhitelistFunction =
-        detected.hasWhitelistFunction;
-
-      result.hasTradingControl =
-        detected.hasTradingControl;
-
-      result.isPausable =
-        detected.isPausable;
-
-      result.hasTaxFunctions =
-        detected.hasTaxFunctions;
-
-      const taxes =
-        detectTaxes(
-          source.sourceCode
-        );
-
-      result.buyTax =
-        taxes.buyTax;
-
-      result.sellTax =
-        taxes.sellTax;
-
-      result.transferTax =
-        detectTransferTax(
-          source.sourceCode
-        );
-
-      /*
-       * If no explicit transfer tax was found,
-       * use the buy/sell tax only when both are
-       * identical. This gives the moderator a
-       * useful transfer-tax compatibility value
-       * without inventing a different tax.
-       */
-      if (
-        result.transferTax === null &&
-        result.buyTax !== null &&
-        result.sellTax !== null &&
-        result.buyTax === result.sellTax
-      ) {
-        result.transferTax =
-          result.buyTax;
-      }
-
-      result.owner =
-        await readOwner(
-          normalizedAddress
-        );
-
-      result.ownerRenounced =
-        result.owner === null ||
-        result.owner.toLowerCase() ===
-          ethers.ZeroAddress.toLowerCase();
-
-      /*
-       * Honeypot detection cannot be reliably
-       * established from source-code pattern
-       * matching alone.
-       *
-       * Therefore we only flag it when the
-       * contract exposes a strong combination of
-       * restrictive trading controls together with
-       * blacklist functionality and no verified
-       * source.
-       *
-       * This is intentionally conservative.
-       */
-      result.isHoneypot =
-        !source.verified &&
-        result.hasBlacklistFunction &&
-        result.hasTradingControl;
-
-      /*
-       * Build security findings.
-       */
-
-      const findings: string[] = [];
-
-      if (result.canMint) {
-        findings.push(
-          "Contract contains minting capability."
-        );
-      }
-
-      if (result.canBurn) {
-        findings.push(
-          "Contract contains burn functionality."
-        );
-      }
-
-      if (
-        result.hasBlacklistFunction
-      ) {
-        findings.push(
-          "Contract contains blacklist functionality."
-        );
-      }
-
-      if (
-        result.hasWhitelistFunction
-      ) {
-        findings.push(
-          "Contract contains whitelist functionality."
-        );
-      }
-
-      if (
-        result.hasTradingControl
-      ) {
-        findings.push(
-          "Contract contains trading-control functionality."
-        );
-      }
-
-      if (result.isPausable) {
-        findings.push(
-          "Contract contains pausing functionality."
-        );
-      }
-
-      if (result.isProxy) {
-        findings.push(
-          "Contract uses a proxy implementation."
-        );
-      }
-
-      if (
-        result.hasTaxFunctions
-      ) {
-        findings.push(
-          "Contract contains configurable tax or fee functionality."
-        );
-      }
-
-      if (result.buyTax !== null) {
-        if (result.buyTax > 10) {
-          findings.push(
-            `High buy tax detected: ${result.buyTax}%.`
-          );
-        }
-      }
-
-      if (
-        result.sellTax !== null
-      ) {
-        if (result.sellTax > 10) {
-          findings.push(
-            `High sell tax detected: ${result.sellTax}%.`
-          );
-        }
-      }
-
-      if (
-        result.transferTax !== null &&
-        result.transferTax > 10
-      ) {
-        findings.push(
-          `High transfer tax detected: ${result.transferTax}%.`
-        );
-      }
-
-      if (result.isHoneypot) {
-        findings.push(
-          "Potential honeypot behavior detected. Manual verification is strongly recommended."
-        );
-      }
-
-      if (result.ownerRenounced) {
-        findings.push(
-          "Ownership appears renounced or unavailable."
-        );
-      }
-
-      result.findings = findings;
-
-      /*
-       * Risk calculation.
-       *
-       * Conservative scoring:
-       * dangerous capabilities increase risk,
-       * while verified source reduces uncertainty.
-       */
-
-      let riskScore = 0;
-
-      if (result.canMint) {
-        riskScore += 3;
-      }
-
-      if (
-        result.hasBlacklistFunction
-      ) {
-        riskScore += 3;
-      }
-
-      if (
-        result.hasTradingControl
-      ) {
-        riskScore += 2;
-      }
-
-      if (result.isPausable) {
-        riskScore += 2;
-      }
-
-      if (result.isProxy) {
-        riskScore += 2;
-      }
-
-      if (
-        result.hasWhitelistFunction
-      ) {
-        riskScore += 1;
-      }
-
-      if (
-        result.hasTaxFunctions
-      ) {
-        riskScore += 1;
-      }
-
-      if (
-        result.buyTax !== null &&
-        result.buyTax > 10
-      ) {
-        riskScore += 2;
-      }
-
-      if (
-        result.sellTax !== null &&
-        result.sellTax > 10
-      ) {
-        riskScore += 2;
-      }
-
-      if (
-        result.transferTax !== null &&
-        result.transferTax > 10
-      ) {
-        riskScore += 2;
-      }
-
-      if (result.isHoneypot) {
-        riskScore += 5;
-      }
-
-      if (!source.verified) {
-        riskScore += 2;
-      }
-
-      if (riskScore >= 7) {
-        result.riskLevel =
-          "HIGH";
-      } else if (
-        riskScore >= 3
-      ) {
-        result.riskLevel =
-          "MEDIUM";
-      } else if (
-        source.verified
-      ) {
-        result.riskLevel =
-          "LOW";
-      } else {
-        result.riskLevel =
-          "UNKNOWN";
-      }
-
-      return result;
-    } catch (error) {
-      console.error(
-        "Security analysis failed:",
-        error
+    const detected =
+      detectSecurityFeatures(
+        source.sourceCode
       );
 
-      return result;
+    result.canMint =
+      detected.canMint;
+
+    result.canBurn =
+      detected.canBurn;
+
+    result.hasBlacklistFunction =
+      detected.hasBlacklistFunction;
+
+    result.hasWhitelistFunction =
+      detected.hasWhitelistFunction;
+
+    result.hasTradingControl =
+      detected.hasTradingControl;
+
+    result.isPausable =
+      detected.isPausable;
+
+    result.hasTaxFunctions =
+      detected.hasTaxFunctions;
+
+    const taxes =
+      detectTaxes(source.sourceCode);
+
+    result.buyTax =
+      taxes.buyTax;
+
+    result.sellTax =
+      taxes.sellTax;
+
+    result.transferTax =
+      detectTransferTax(
+        source.sourceCode
+      );
+
+    if (
+      result.transferTax === null &&
+      result.buyTax !== null &&
+      result.sellTax !== null &&
+      result.buyTax === result.sellTax
+    ) {
+      result.transferTax =
+        result.buyTax;
     }
-  };
+
+    result.owner =
+      await readOwner(
+        normalizedAddress
+      );
+
+    result.ownerRenounced =
+      result.owner === null ||
+      result.owner.toLowerCase() ===
+        ethers.ZeroAddress.toLowerCase();
+
+    /*
+     * Conservative honeypot indicator.
+     *
+     * Source-only analysis cannot prove a honeypot.
+     * We therefore only raise this indicator when
+     * multiple restrictive controls are present and
+     * source verification is unavailable.
+     */
+    result.isHoneypot =
+      !source.verified &&
+      result.hasBlacklistFunction &&
+      result.hasTradingControl;
+
+    const findings: string[] = [];
+
+    if (result.canMint) {
+      findings.push(
+        "Contract contains minting capability."
+      );
+    }
+
+    if (result.canBurn) {
+      findings.push(
+        "Contract contains burn functionality."
+      );
+    }
+
+    if (result.hasBlacklistFunction) {
+      findings.push(
+        "Contract contains blacklist functionality."
+      );
+    }
+
+    if (result.hasWhitelistFunction) {
+      findings.push(
+        "Contract contains whitelist functionality."
+      );
+    }
+
+    if (result.hasTradingControl) {
+      findings.push(
+        "Contract contains trading-control functionality."
+      );
+    }
+
+    if (result.isPausable) {
+      findings.push(
+        "Contract contains pausing functionality."
+      );
+    }
+
+    if (result.isProxy) {
+      findings.push(
+        "Contract uses a proxy implementation."
+      );
+    }
+
+    if (result.hasTaxFunctions) {
+      findings.push(
+        "Contract contains configurable tax or fee functionality."
+      );
+    }
+
+    if (
+      result.buyTax !== null &&
+      result.buyTax > 10
+    ) {
+      findings.push(
+        `High buy tax detected: ${result.buyTax}%.`
+      );
+    }
+
+    if (
+      result.sellTax !== null &&
+      result.sellTax > 10
+    ) {
+      findings.push(
+        `High sell tax detected: ${result.sellTax}%.`
+      );
+    }
+
+    if (
+      result.transferTax !== null &&
+      result.transferTax > 10
+    ) {
+      findings.push(
+        `High transfer tax detected: ${result.transferTax}%.`
+      );
+    }
+
+    if (result.isHoneypot) {
+      findings.push(
+        "Potential honeypot behavior detected. Manual verification is strongly recommended."
+      );
+    }
+
+    if (result.ownerRenounced) {
+      findings.push(
+        "Ownership appears renounced or unavailable."
+      );
+    }
+
+    result.findings = findings;
+
+    /*
+     * Risk scoring.
+     *
+     * This is an indicator, not a guarantee that a token
+     * is safe or malicious.
+     */
+    let riskScore = 0;
+
+    if (result.canMint) {
+      riskScore += 3;
+    }
+
+    if (result.hasBlacklistFunction) {
+      riskScore += 3;
+    }
+
+    if (result.hasTradingControl) {
+      riskScore += 2;
+    }
+
+    if (result.isPausable) {
+      riskScore += 2;
+    }
+
+    if (result.isProxy) {
+      riskScore += 2;
+    }
+
+    if (result.hasWhitelistFunction) {
+      riskScore += 1;
+    }
+
+    if (result.hasTaxFunctions) {
+      riskScore += 1;
+    }
+
+    if (
+      result.buyTax !== null &&
+      result.buyTax > 10
+    ) {
+      riskScore += 2;
+    }
+
+    if (
+      result.sellTax !== null &&
+      result.sellTax > 10
+    ) {
+      riskScore += 2;
+    }
+
+    if (
+      result.transferTax !== null &&
+      result.transferTax > 10
+    ) {
+      riskScore += 2;
+    }
+
+    if (result.isHoneypot) {
+      riskScore += 5;
+    }
+
+    if (!source.verified) {
+      riskScore += 2;
+    }
+
+    if (riskScore >= 7) {
+      result.riskLevel = "HIGH";
+    } else if (riskScore >= 3) {
+      result.riskLevel = "MEDIUM";
+    } else if (source.verified) {
+      result.riskLevel = "LOW";
+    } else {
+      result.riskLevel = "UNKNOWN";
+    }
+
+    return result;
+  } catch (error) {
+    console.error(
+      "Security analysis failed:",
+      error
+    );
+
+    return result;
+  }
+};
