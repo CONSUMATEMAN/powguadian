@@ -18,6 +18,8 @@ const bot =
     config.telegramBotToken
   );
 
+let botStarted = false;
+
 /* -------------------------------------------------------------------------- */
 /* HELPERS                                                                    */
 /* -------------------------------------------------------------------------- */
@@ -153,9 +155,14 @@ const formatLaunchTime = (
   }
 
   try {
+    const milliseconds =
+      timestamp < 100000000000
+        ? timestamp * 1000
+        : timestamp;
+
     const date =
       new Date(
-        timestamp
+        milliseconds
       );
 
     if (
@@ -166,17 +173,20 @@ const formatLaunchTime = (
       return null;
     }
 
-    return date.toLocaleString(
-      "en-US",
-      {
-        year: "numeric",
-        month: "short",
-        day: "numeric",
-        hour: "2-digit",
-        minute: "2-digit",
-        timeZone: "UTC",
-      }
-    ) + " UTC";
+    return (
+      date.toLocaleString(
+        "en-US",
+        {
+          year: "numeric",
+          month: "short",
+          day: "numeric",
+          hour: "2-digit",
+          minute: "2-digit",
+          timeZone: "UTC",
+        }
+      ) +
+      " UTC"
+    );
   } catch {
     return null;
   }
@@ -347,6 +357,30 @@ const formatScanResult = (
       risk
     )} ${risk}\n`;
 
+  if (
+    security?.owner
+  ) {
+    response +=
+      `Owner: ${shortenAddress(
+        security.owner
+      )}`;
+
+    if (
+      security.ownerRenounced
+    ) {
+      response +=
+        ` (Renounced)`;
+    }
+
+    response +=
+      `\n`;
+  } else if (
+    security?.ownerRenounced
+  ) {
+    response +=
+      `Owner: Renounced / unavailable\n`;
+  }
+
   /* ------------------------------------------------------------------------ */
   /* MARKET                                                                   */
   /* ------------------------------------------------------------------------ */
@@ -498,6 +532,13 @@ const formatScanResult = (
           liquidity.remainingDays
         )} days remaining\n`;
     }
+
+    if (
+      liquidity.lockedUntil
+    ) {
+      response +=
+        `Unlock: ${liquidity.lockedUntil}\n`;
+    }
   }
 
   /* ------------------------------------------------------------------------ */
@@ -540,6 +581,30 @@ const formatScanResult = (
       `Top: ${top}\n`;
   }
 
+  if (
+    holders?.ownerHoldingsPercent !==
+      null &&
+    holders?.ownerHoldingsPercent !==
+      undefined
+  ) {
+    response +=
+      `Owner Holdings: ${formatPercent(
+        holders.ownerHoldingsPercent
+      )}\n`;
+  }
+
+  if (
+    holders?.burnedPercent !==
+      null &&
+    holders?.burnedPercent !==
+      undefined
+  ) {
+    response +=
+      `Burned Supply: ${formatPercent(
+        holders.burnedPercent
+      )}\n`;
+  }
+
   /* ------------------------------------------------------------------------ */
   /* TAX                                                                      */
   /* ------------------------------------------------------------------------ */
@@ -568,6 +633,16 @@ const formatScanResult = (
           ? `${security.sellTax}%`
           : "?"
       } sell\n`;
+  }
+
+  if (
+    security?.transferTax !==
+      null &&
+    security?.transferTax !==
+      undefined
+  ) {
+    response +=
+      `Transfer Tax: ${security.transferTax}%\n`;
   }
 
   /* ------------------------------------------------------------------------ */
@@ -699,6 +774,9 @@ const formatScanResult = (
   ) {
     response +=
       `Source: Verified\n`;
+  } else {
+    response +=
+      `Source: Unverified\n`;
   }
 
   /* ------------------------------------------------------------------------ */
@@ -975,6 +1053,19 @@ bot.catch(
 
 const startBot =
   async (): Promise<void> => {
+    if (
+      botStarted
+    ) {
+      console.warn(
+        "POWGUADIAN is already running."
+      );
+
+      return;
+    }
+
+    botStarted =
+      true;
+
     console.log(
       "🐾 POWGUADIAN is starting..."
     );
@@ -983,28 +1074,87 @@ const startBot =
       "🔎 Testing Telegram connection..."
     );
 
-    const botInfo =
-      await bot.telegram.getMe();
+    try {
+      const botInfo =
+        await bot.telegram.getMe();
 
-    console.log(
-      "✅ Telegram connection successful."
-    );
+      console.log(
+        "✅ Telegram connection successful."
+      );
 
-    console.log(
-      `🤖 Bot: @${botInfo.username}`
-    );
+      console.log(
+        `🤖 Bot: @${botInfo.username}`
+      );
 
-    await bot.launch();
+      console.log(
+        "🔄 Starting Telegram polling..."
+      );
 
-    console.log(
-      "🐾 POWGUADIAN is online and listening."
-    );
+      await bot.launch({
+        dropPendingUpdates: true,
+      });
+
+      console.log(
+        "🐾 POWGUADIAN is online and listening."
+      );
+    } catch (error: any) {
+      botStarted =
+        false;
+
+      const description =
+        error?.response?.description ??
+        error?.message ??
+        String(error);
+
+      if (
+        description.includes(
+          "409"
+        ) ||
+        description.includes(
+          "Conflict"
+        ) ||
+        description.includes(
+          "getUpdates"
+        )
+      ) {
+        console.error(
+          [
+            "",
+            "============================================================",
+            "TELEGRAM 409 CONFLICT",
+            "============================================================",
+            "Another POWGUADIAN process is already using this bot token.",
+            "",
+            "Stop the other bot instance before starting this one.",
+            "",
+            "Common causes:",
+            "1. Railway deployment is running while local bot is running.",
+            "2. Another terminal already has npm start running.",
+            "3. Another server/container is using the same Telegram token.",
+            "",
+            "Only ONE polling instance can use this Telegram bot token.",
+            "============================================================",
+            "",
+          ].join("\n")
+        );
+      } else {
+        console.error(
+          "Failed to start POWGUADIAN:",
+          error
+        );
+      }
+
+      throw error;
+    }
   };
 
 startBot().catch(
   (error) => {
     console.error(
-      "Failed to start POWGUADIAN:",
+      "POWGUADIAN startup failed."
+    );
+
+    console.error(
       error
     );
 

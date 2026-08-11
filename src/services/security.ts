@@ -114,6 +114,7 @@ const getContractSource = async (
 
     const data = (await response.json()) as {
       status?: string;
+      message?: string;
       result?: unknown;
     };
 
@@ -145,7 +146,8 @@ const getContractSource = async (
     return {
       verified: source.trim().length > 0,
       sourceCode: source,
-      contractName: item.ContractName ?? null,
+      contractName:
+        item.ContractName ?? null,
       proxy,
       implementation,
     };
@@ -247,6 +249,8 @@ const detectSecurityFeatures = (
     /\baddToBlacklist\b/i,
     /\bremoveFromBlacklist\b/i,
     /\bblocked\b/i,
+    /\bblocklist\b/i,
+    /\bblockedAddress\b/i,
   ]);
 
   const hasWhitelistFunction = sourceHas(source, [
@@ -269,6 +273,7 @@ const detectSecurityFeatures = (
     /\bdisableTrading\b/i,
     /\bcanTrade\b/i,
     /\btrading\b/i,
+    /\blaunch\b/i,
   ]);
 
   const isPausable = sourceHas(source, [
@@ -294,6 +299,10 @@ const detectSecurityFeatures = (
     /\bSELL_FEE\b/i,
     /\btaxFee\b/i,
     /\btransferTax\b/i,
+    /\btransferFee\b/i,
+    /\btotalFee\b/i,
+    /\bmarketingFee\b/i,
+    /\bliquidityFee\b/i,
     /\bfee\b/i,
   ]);
 
@@ -332,7 +341,7 @@ const extractTaxValue = (
         "i"
       ),
       new RegExp(
-        `\\b${escaped}\\b[^\\n]{0,100}?(\\d+(?:\\.\\d+)?)\\s*%`,
+        `\\b${escaped}\\b[^\\n]{0,150}?(\\d+(?:\\.\\d+)?)\\s*%`,
         "i"
       ),
     ];
@@ -417,17 +426,19 @@ export const analyzeSecurity = async (
     ethers.getAddress(address);
 
   try {
-    const code = await provider.getCode(
-      normalizedAddress
-    );
+    const code =
+      await provider.getCode(
+        normalizedAddress
+      );
 
     if (code === "0x") {
       return result;
     }
 
-    const source = await getContractSource(
-      normalizedAddress
-    );
+    const source =
+      await getContractSource(
+        normalizedAddress
+      );
 
     result.sourceVerified =
       source.verified;
@@ -465,7 +476,9 @@ export const analyzeSecurity = async (
       detected.hasTaxFunctions;
 
     const taxes =
-      detectTaxes(source.sourceCode);
+      detectTaxes(
+        source.sourceCode
+      );
 
     result.buyTax =
       taxes.buyTax;
@@ -501,15 +514,19 @@ export const analyzeSecurity = async (
     /*
      * Conservative honeypot indicator.
      *
-     * Source-only analysis cannot prove a honeypot.
-     * We therefore only raise this indicator when
-     * multiple restrictive controls are present and
-     * source verification is unavailable.
+     * Source analysis alone cannot prove a honeypot.
+     * We only mark it as a potential honeypot when
+     * several restrictive indicators are present.
      */
     result.isHoneypot =
-      !source.verified &&
       result.hasBlacklistFunction &&
-      result.hasTradingControl;
+      result.hasTradingControl &&
+      (
+        result.sellTax !== null &&
+        result.sellTax >= 50
+          ? true
+          : !source.verified
+      );
 
     const findings: string[] = [];
 
@@ -553,6 +570,12 @@ export const analyzeSecurity = async (
       findings.push(
         "Contract uses a proxy implementation."
       );
+
+      if (source.implementation) {
+        findings.push(
+          `Proxy implementation: ${source.implementation}`
+        );
+      }
     }
 
     if (result.hasTaxFunctions) {
@@ -598,15 +621,26 @@ export const analyzeSecurity = async (
       findings.push(
         "Ownership appears renounced or unavailable."
       );
+    } else if (result.owner) {
+      findings.push(
+        `Contract owner detected: ${result.owner}.`
+      );
     }
 
-    result.findings = findings;
+    if (!source.verified) {
+      findings.push(
+        "Contract source code could not be verified through BscScan."
+      );
+    }
+
+    result.findings =
+      findings;
 
     /*
      * Risk scoring.
      *
-     * This is an indicator, not a guarantee that a token
-     * is safe or malicious.
+     * This is an indicator only.
+     * It does not guarantee that a token is safe or malicious.
      */
     let riskScore = 0;
 
@@ -667,7 +701,14 @@ export const analyzeSecurity = async (
       riskScore += 2;
     }
 
-    if (riskScore >= 7) {
+    if (
+      result.owner &&
+      !result.ownerRenounced
+    ) {
+      riskScore += 1;
+    }
+
+    if (riskScore >= 8) {
       result.riskLevel = "HIGH";
     } else if (riskScore >= 3) {
       result.riskLevel = "MEDIUM";
@@ -687,3 +728,4 @@ export const analyzeSecurity = async (
     return result;
   }
 };
+

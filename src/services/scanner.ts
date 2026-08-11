@@ -1,4 +1,3 @@
-
 import { ethers } from "ethers";
 import { config } from "../config/env";
 import {
@@ -383,8 +382,8 @@ const detectPair = async (
     return {
       token0,
       token1,
-      reserve0: reserves[0],
-      reserve1: reserves[1],
+      reserve0: BigInt(reserves[0]),
+      reserve1: BigInt(reserves[1]),
     };
   } catch {
     return null;
@@ -412,6 +411,17 @@ const getUnderlyingTokenFromPair = (
   return token0;
 };
 
+const safeNumber = (
+  value: unknown
+): number | null => {
+  const number =
+    Number(value);
+
+  return Number.isFinite(number)
+    ? number
+    : null;
+};
+
 const fetchDexScreenerData =
   async (
     tokenAddress: string,
@@ -424,10 +434,20 @@ const fetchDexScreenerData =
     try {
       const response =
         await fetch(
-          `https://api.dexscreener.com/latest/dex/tokens/${tokenAddress}`
+          `https://api.dexscreener.com/latest/dex/tokens/${tokenAddress}`,
+          {
+            headers: {
+              Accept:
+                "application/json",
+            },
+          }
         );
 
       if (!response.ok) {
+        console.error(
+          `DexScreener returned HTTP ${response.status}.`
+        );
+
         return market;
       }
 
@@ -466,70 +486,76 @@ const fetchDexScreenerData =
         bscPairs[0];
 
       market.priceUsd =
-        pair?.priceUsd != null
-          ? Number(pair.priceUsd)
-          : null;
+        safeNumber(
+          pair?.priceUsd
+        );
 
       market.priceNative =
-        pair?.priceNative != null
-          ? Number(pair.priceNative)
-          : null;
+        safeNumber(
+          pair?.priceNative
+        );
 
       if (
-        pair?.marketCap != null &&
-        Number.isFinite(
-          Number(pair.marketCap)
-        )
+        pair?.marketCap != null
       ) {
         market.marketCap =
-          Number(pair.marketCap);
+          safeNumber(
+            pair.marketCap
+          );
       } else if (
         market.priceUsd !== null &&
         totalSupply &&
         decimals !== undefined
       ) {
-        const supply =
-          Number(totalSupply);
+        try {
+          const supply =
+            Number(
+              totalSupply
+            );
 
-        if (
-          Number.isFinite(supply)
-        ) {
-          market.marketCap =
-            market.priceUsd *
-            supply;
+          if (
+            Number.isFinite(
+              supply
+            )
+          ) {
+            market.marketCap =
+              market.priceUsd *
+              supply;
+          }
+        } catch {
+          // Ignore fallback calculation.
         }
       }
 
       market.liquidityUsd =
-        pair?.liquidity?.usd != null
-          ? Number(
-              pair.liquidity.usd
-            )
-          : null;
+        safeNumber(
+          pair?.liquidity?.usd
+        );
 
       market.volume24h =
-        pair?.volume?.h24 != null
-          ? Number(
-              pair.volume.h24
-            )
-          : null;
+        safeNumber(
+          pair?.volume?.h24
+        );
 
       market.buys24h =
-        pair?.txns?.h24?.buys != null
-          ? Number(
-              pair.txns.h24.buys
-            )
-          : null;
+        safeNumber(
+          pair?.txns?.h24?.buys
+        );
 
       market.sells24h =
-        pair?.txns?.h24?.sells != null
-          ? Number(
-              pair.txns.h24.sells
-            )
-          : null;
+        safeNumber(
+          pair?.txns?.h24?.sells
+        );
 
       market.pairAddress =
-        pair?.pairAddress ?? null;
+        pair?.pairAddress &&
+        ethers.isAddress(
+          pair.pairAddress
+        )
+          ? ethers.getAddress(
+              pair.pairAddress
+            )
+          : null;
 
       market.dex =
         pair?.dexId ?? null;
@@ -542,7 +568,7 @@ const fetchDexScreenerData =
 
       market.pairCreatedAt =
         pair?.pairCreatedAt != null
-          ? Number(
+          ? safeNumber(
               pair.pairCreatedAt
             )
           : null;
@@ -731,7 +757,7 @@ const enrichPairData =
           tokenAddress.toLowerCase()
         ) {
           tokenReserve =
-            reserves[1];
+            BigInt(reserves[1]);
         }
       }
 
@@ -751,11 +777,14 @@ const enrichPairData =
           tokenAddress.toLowerCase()
         ) {
           tokenReserve =
-            reserves[0];
+            BigInt(reserves[0]);
         }
       }
 
       if (
+        Number.isFinite(
+          wbnbReserve
+        ) &&
         wbnbReserve > 0
       ) {
         market.lpBnb =
@@ -766,17 +795,24 @@ const enrichPairData =
         tokenReserve > 0n &&
         decimals !== undefined
       ) {
-        market.tokenReserve =
-          Number(
-            ethers.formatUnits(
-              tokenReserve,
-              decimals
-            )
+        const formattedReserve =
+          ethers.formatUnits(
+            tokenReserve,
+            decimals
           );
 
-        if (totalSupply) {
+        market.tokenReserve =
+          Number(
+            formattedReserve
+          );
+
+        if (
+          totalSupply
+        ) {
           const supply =
-            Number(totalSupply);
+            Number(
+              totalSupply
+            );
 
           if (
             Number.isFinite(
@@ -805,11 +841,18 @@ const getContractSource =
     verified: boolean;
     sourceCode: string | null;
     contractName: string | null;
+    proxy: boolean;
+    implementation: string | null;
   }> => {
     const result = {
       verified: false,
-      sourceCode: null as string | null,
-      contractName: null as string | null,
+      sourceCode:
+        null as string | null,
+      contractName:
+        null as string | null,
+      proxy: false,
+      implementation:
+        null as string | null,
     };
 
     const apiKey =
@@ -828,7 +871,12 @@ const getContractSource =
         `&apikey=${encodeURIComponent(apiKey)}`;
 
       const response =
-        await fetch(url);
+        await fetch(url, {
+          headers: {
+            Accept:
+              "application/json",
+          },
+        });
 
       if (!response.ok) {
         return result;
@@ -852,18 +900,31 @@ const getContractSource =
       const source =
         item?.SourceCode ?? "";
 
+      result.verified =
+        source.trim().length > 0;
+
+      result.sourceCode =
+        source;
+
+      result.contractName =
+        item.ContractName ??
+        null;
+
+      result.proxy =
+        String(
+          item.Proxy ?? ""
+        ) === "1";
+
       if (
-        source.trim().length > 0
+        item.Implementation &&
+        ethers.isAddress(
+          item.Implementation
+        )
       ) {
-        result.verified =
-          true;
-
-        result.sourceCode =
-          source;
-
-        result.contractName =
-          item.ContractName ??
-          null;
+        result.implementation =
+          ethers.getAddress(
+            item.Implementation
+          );
       }
     } catch (error) {
       console.error(
@@ -906,8 +967,12 @@ const extractSocialLinks =
 
       if (
         (
-          lower.includes("twitter.com") ||
-          lower.includes("x.com")
+          lower.includes(
+            "twitter.com"
+          ) ||
+          lower.includes(
+            "x.com"
+          )
         ) &&
         !result.twitter
       ) {
@@ -915,57 +980,81 @@ const extractSocialLinks =
           url;
       } else if (
         (
-          lower.includes("t.me") ||
-          lower.includes("telegram.me") ||
-          lower.includes("telegram.")
+          lower.includes(
+            "t.me"
+          ) ||
+          lower.includes(
+            "telegram.me"
+          ) ||
+          lower.includes(
+            "telegram."
+          )
         ) &&
         !result.telegram
       ) {
         result.telegram =
           url;
       } else if (
-        lower.includes("discord") &&
+        lower.includes(
+          "discord"
+        ) &&
         !result.discord
       ) {
         result.discord =
           url;
       } else if (
-        lower.includes("github.com") &&
+        lower.includes(
+          "github.com"
+        ) &&
         !result.github
       ) {
         result.github =
           url;
       } else if (
         (
-          lower.includes("youtube.com") ||
-          lower.includes("youtu.be")
+          lower.includes(
+            "youtube.com"
+          ) ||
+          lower.includes(
+            "youtu.be"
+          )
         ) &&
         !result.youtube
       ) {
         result.youtube =
           url;
       } else if (
-        lower.includes("instagram.com") &&
+        lower.includes(
+          "instagram.com"
+        ) &&
         !result.instagram
       ) {
         result.instagram =
           url;
       } else if (
-        lower.includes("facebook.com") &&
+        lower.includes(
+          "facebook.com"
+        ) &&
         !result.facebook
       ) {
         result.facebook =
           url;
       } else if (
-        lower.includes("tiktok.com") &&
+        lower.includes(
+          "tiktok.com"
+        ) &&
         !result.tiktok
       ) {
         result.tiktok =
           url;
       } else if (
         !result.website &&
-        !lower.includes("bscscan.com") &&
-        !lower.includes("etherscan.io")
+        !lower.includes(
+          "bscscan.com"
+        ) &&
+        !lower.includes(
+          "etherscan.io"
+        )
       ) {
         result.website =
           url;
@@ -1021,47 +1110,51 @@ const getUnlockTime =
   async (
     address: string
   ): Promise<number | null> => {
-    try {
-      const locker =
-        new ethers.Contract(
-          address,
-          LOCKER_ABI,
-          provider
-        );
+    if (
+      !ethers.isAddress(
+        address
+      )
+    ) {
+      return null;
+    }
 
-      const methods = [
-        "unlockTime",
-        "lockEndTime",
-        "endTime",
-        "getUnlockTime",
-        "lockedUntil",
-      ];
+    const locker =
+      new ethers.Contract(
+        address,
+        LOCKER_ABI,
+        provider
+      );
 
-      for (
-        const method of
-          methods
-      ) {
-        try {
-          const value =
-            await locker[method]();
+    const methods = [
+      "unlockTime",
+      "lockEndTime",
+      "endTime",
+      "getUnlockTime",
+      "lockedUntil",
+    ];
 
-          const timestamp =
-            Number(value);
+    for (
+      const method of
+        methods
+    ) {
+      try {
+        const value =
+          await locker[method]();
 
-          if (
-            Number.isFinite(
-              timestamp
-            ) &&
-            timestamp > 0
-          ) {
-            return timestamp;
-          }
-        } catch {
-          // Try next method.
+        const timestamp =
+          Number(value);
+
+        if (
+          Number.isFinite(
+            timestamp
+          ) &&
+          timestamp > 0
+        ) {
+          return timestamp;
         }
+      } catch {
+        // Try next method.
       }
-    } catch {
-      // Not a readable locker.
     }
 
     return null;
@@ -1091,7 +1184,12 @@ const getBscScanHolders =
         `&apikey=${encodeURIComponent(apiKey)}`;
 
       const response =
-        await fetch(url);
+        await fetch(url, {
+          headers: {
+            Accept:
+              "application/json",
+          },
+        });
 
       if (!response.ok) {
         return [];
@@ -1141,7 +1239,9 @@ const analyzeLP =
         );
 
       const lpSupply =
-        await pair.totalSupply();
+        BigInt(
+          await pair.totalSupply()
+        );
 
       result.lpTotalSupply =
         lpSupply.toString();
@@ -1161,8 +1261,10 @@ const analyzeLP =
       ) {
         try {
           burnedBalance +=
-            await pair.balanceOf(
-              deadAddress
+            BigInt(
+              await pair.balanceOf(
+                deadAddress
+              )
             );
         } catch {
           // Ignore.
@@ -1174,12 +1276,14 @@ const analyzeLP =
       ) {
         const burnPercent =
           Number(
-            ethers.formatUnits(
-              (burnedBalance * 10000n) /
-                lpSupply,
-              2
-            )
-          );
+            (
+              (
+                burnedBalance *
+                10000n
+              ) /
+              lpSupply
+            ).toString()
+          ) / 100;
 
         result.lpBurnPercent =
           burnPercent;
@@ -1246,8 +1350,14 @@ const analyzeLP =
           continue;
         }
 
-        const balance =
-          BigInt(quantity);
+        let balance: bigint;
+
+        try {
+          balance =
+            BigInt(quantity);
+        } catch {
+          continue;
+        }
 
         if (
           balance === 0n
@@ -1279,22 +1389,19 @@ const analyzeLP =
               Date.now() / 1000
             );
 
-          const lockedDate =
-            new Date(
-              unlockTime * 1000
-            );
+          const remainingSeconds =
+            unlockTime - now;
 
           result.lockedUntil =
-            lockedDate.toISOString();
+            new Date(
+              unlockTime * 1000
+            ).toISOString();
 
           result.durationDays =
             Math.max(
               0,
               Math.round(
-                (
-                  unlockTime -
-                  now
-                ) /
+                remainingSeconds /
                   86400
               )
             );
@@ -1320,8 +1427,11 @@ const analyzeLP =
           return result;
         }
       }
-    } catch {
-      // Leave LP status UNKNOWN.
+    } catch (error) {
+      console.error(
+        "LP analysis failed:",
+        error
+      );
     }
 
     return result;
@@ -1354,7 +1464,12 @@ const analyzeHolders =
         `&apikey=${encodeURIComponent(apiKey)}`;
 
       const countResponse =
-        await fetch(countUrl);
+        await fetch(countUrl, {
+          headers: {
+            Accept:
+              "application/json",
+          },
+        });
 
       if (
         countResponse.ok
@@ -1363,7 +1478,8 @@ const analyzeHolders =
           (await countResponse.json()) as BscScanResponse;
 
         if (
-          countData?.status === "1" &&
+          countData?.status ===
+            "1" &&
           typeof countData.result ===
             "string"
         ) {
@@ -1390,8 +1506,22 @@ const analyzeHolders =
           50
         );
 
-      const supply =
-        Number(totalSupply);
+      if (
+        holderList.length === 0
+      ) {
+        return result;
+      }
+
+      let supply: number;
+
+      try {
+        supply =
+          Number(
+            totalSupply
+          );
+      } catch {
+        return result;
+      }
 
       if (
         !Number.isFinite(
@@ -1403,7 +1533,7 @@ const analyzeHolders =
       }
 
       const excluded =
-        new Set(
+        new Set<string>(
           DEAD_ADDRESSES
         );
 
@@ -1456,9 +1586,28 @@ const analyzeHolders =
           continue;
         }
 
+        let rawBalance: bigint;
+
+        try {
+          rawBalance =
+            BigInt(quantity);
+        } catch {
+          continue;
+        }
+
+        if (
+          rawBalance <= 0n
+        ) {
+          continue;
+        }
+
         const balance =
-          Number(quantity) /
-          10 ** decimals;
+          Number(
+            ethers.formatUnits(
+              rawBalance,
+              decimals
+            )
+          );
 
         if (
           !Number.isFinite(
@@ -1534,7 +1683,8 @@ const analyzeHolders =
             0
           );
 
-      let burned = 0;
+      let burnedRaw =
+        0n;
 
       for (
         const holder of
@@ -1563,30 +1713,38 @@ const analyzeHolders =
             holderAddress.toLowerCase()
           )
         ) {
-          const balance =
-            Number(quantity) /
-            10 ** decimals;
-
-          if (
-            Number.isFinite(
-              balance
-            )
-          ) {
-            burned +=
-              balance;
+          try {
+            burnedRaw +=
+              BigInt(quantity);
+          } catch {
+            // Ignore invalid quantity.
           }
         }
       }
 
       if (
-        burned > 0
+        burnedRaw > 0n
       ) {
-        result.burnedPercent =
-          (
-            burned /
-            supply
-          ) *
-          100;
+        const burned =
+          Number(
+            ethers.formatUnits(
+              burnedRaw,
+              decimals
+            )
+          );
+
+        if (
+          Number.isFinite(
+            burned
+          )
+        ) {
+          result.burnedPercent =
+            (
+              burned /
+              supply
+            ) *
+            100;
+        }
       }
 
       if (
@@ -1608,26 +1766,45 @@ const analyzeHolders =
             holder.quantity;
 
           if (
-            holderAddress &&
-            quantity &&
-            holderAddress.toLowerCase() ===
-              ownerAddress.toLowerCase()
+            !holderAddress ||
+            !quantity ||
+            !ethers.isAddress(
+              holderAddress
+            )
           ) {
-            const balance =
-              Number(quantity) /
-              10 ** decimals;
+            continue;
+          }
 
-            if (
-              Number.isFinite(
-                balance
-              )
-            ) {
-              result.ownerHoldingsPercent =
-                (
-                  balance /
-                  supply
-                ) *
-                100;
+          if (
+            holderAddress.toLowerCase() ===
+            ownerAddress.toLowerCase()
+          ) {
+            try {
+              const rawBalance =
+                BigInt(quantity);
+
+              const balance =
+                Number(
+                  ethers.formatUnits(
+                    rawBalance,
+                    decimals
+                  )
+                );
+
+              if (
+                Number.isFinite(
+                  balance
+                )
+              ) {
+                result.ownerHoldingsPercent =
+                  (
+                    balance /
+                    supply
+                  ) *
+                  100;
+              }
+            } catch {
+              // Ignore invalid quantity.
             }
 
             break;
