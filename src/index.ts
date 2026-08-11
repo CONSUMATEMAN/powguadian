@@ -38,34 +38,6 @@ const shortenAddress = (
   )}...${address.slice(-4)}`;
 };
 
-const formatNumber = (
-  value?: string | number | null
-): string => {
-  if (
-    value === undefined ||
-    value === null ||
-    value === ""
-  ) {
-    return "—";
-  }
-
-  const number =
-    Number(value);
-
-  if (
-    !Number.isFinite(number)
-  ) {
-    return String(value);
-  }
-
-  return number.toLocaleString(
-    "en-US",
-    {
-      maximumFractionDigits: 4,
-    }
-  );
-};
-
 const formatMoney = (
   value?: number | null
 ): string => {
@@ -105,6 +77,34 @@ const formatMoney = (
   )}`;
 };
 
+const formatNumber = (
+  value?: string | number | null
+): string => {
+  if (
+    value === undefined ||
+    value === null ||
+    value === ""
+  ) {
+    return "—";
+  }
+
+  const number =
+    Number(value);
+
+  if (
+    !Number.isFinite(number)
+  ) {
+    return String(value);
+  }
+
+  return number.toLocaleString(
+    "en-US",
+    {
+      maximumFractionDigits: 2,
+    }
+  );
+};
+
 const formatPercent = (
   value?: number | null
 ): string => {
@@ -139,227 +139,43 @@ const riskEmoji = (
   }
 };
 
-const formatDate = (
-  date?: string | null
-): string => {
-  if (!date) {
-    return "—";
-  }
-
-  const parsed =
-    new Date(date);
-
-  if (
-    Number.isNaN(
-      parsed.getTime()
-    )
-  ) {
-    return date;
-  }
-
-  return parsed.toLocaleDateString(
-    "en-GB",
-    {
-      day: "2-digit",
-      month: "short",
-      year: "numeric",
-    }
-  );
-};
-
-const formatRemaining = (
-  remainingDays?: number | null
-): string => {
-  if (
-    remainingDays ===
-      undefined ||
-    remainingDays === null ||
-    !Number.isFinite(
-      remainingDays
-    )
-  ) {
-    return "—";
-  }
-
-  if (
-    remainingDays <= 0
-  ) {
-    return "Expired";
-  }
-
-  if (
-    remainingDays < 1
-  ) {
-    return `${Math.round(
-      remainingDays * 24
-    )}h`;
-  }
-
-  return `${remainingDays.toFixed(
-    1
-  )}d`;
-};
-
-const statusText = (
-  value:
-    | boolean
-    | null
-    | undefined,
-  positive = "Yes",
-  negative = "No"
-): string => {
-  if (value === true) {
-    return positive;
-  }
-
-  if (value === false) {
-    return negative;
-  }
-
-  return "Unknown";
-};
-
 /* -------------------------------------------------------------------------- */
-/* SECURITY SUMMARY                                                           */
-/* -------------------------------------------------------------------------- */
-
-const formatSecurity = (
-  result: ScanResult
-): string => {
-  const security =
-    result.security;
-
-  if (!security) {
-    return (
-      `Security\n` +
-      `Unavailable`
-    );
-  }
-
-  const ownerText =
-    security.ownerRenounced ===
-    true
-      ? "Renounced"
-      : security.owner
-        ? "Active"
-        : "Unknown";
-
-  const honeypot =
-    security.isHoneypot === null ||
-    security.isHoneypot ===
-      undefined
-      ? "Unknown"
-      : security.isHoneypot
-        ? "Possible"
-        : "No indication";
-
-  const openSource =
-    security.isOpenSource ===
-      null ||
-    security.isOpenSource ===
-      undefined
-      ? "Unknown"
-      : security.isOpenSource
-        ? "Yes"
-        : "No";
-
-  return (
-    `Security\n` +
-    `Risk: ${riskEmoji(
-      security.riskLevel
-    )} ${
-      security.riskLevel ??
-      "UNKNOWN"
-    }\n` +
-    `Owner: ${ownerText}\n` +
-    `Mint: ${statusText(
-      security.canMint,
-      "Detected",
-      "No"
-    )}\n` +
-    `Burn: ${statusText(
-      security.canBurn,
-      "Detected",
-      "No"
-    )}\n` +
-    `Blacklist: ${statusText(
-      security.hasBlacklistFunction,
-      "Detected",
-      "No"
-    )}\n` +
-    `Trading control: ${statusText(
-      security.hasTradingControl,
-      "Detected",
-      "No"
-    )}\n` +
-    `Tax code: ${statusText(
-      security.hasTaxFunctions,
-      "Detected",
-      "No"
-    )}\n` +
-    `Proxy: ${
-      security.isProxy
-        ? "Yes"
-        : "No"
-    }\n` +
-    `Honeypot: ${honeypot}\n` +
-    `Open source: ${openSource}\n` +
-    `Buy tax: ${
-      security.buyTax !==
-        null &&
-      security.buyTax !==
-        undefined
-        ? `${security.buyTax}%`
-        : "—"
-    }\n` +
-    `Sell tax: ${
-      security.sellTax !==
-        null &&
-      security.sellTax !==
-        undefined
-        ? `${security.sellTax}%`
-        : "—"
-    }`
-  );
-};
-
-/* -------------------------------------------------------------------------- */
-/* TOKEN FORMATTER                                                            */
+/* SHORT SCAN FORMATTER                                                       */
 /* -------------------------------------------------------------------------- */
 
 const formatScanResult = (
   result: ScanResult
 ): string => {
-  if (!result.isContract) {
+  if (
+    !result.isContract
+  ) {
     return (
       `🐾 POWGUADIAN\n\n` +
-      `No contract found.\n\n` +
-      `Address\n` +
-      `${result.address}`
+      `No BSC contract found.\n\n` +
+      `Address: ${result.address}`
     );
   }
 
+  /*
+   * A genuine pair that could not be resolved
+   * to an ERC20 token.
+   */
   if (
     result.type === "pair"
   ) {
     return (
-      `🐾 POWGUADIAN\n` +
-      `Liquidity Pair\n\n` +
+      `🐾 POWGUADIAN\n\n` +
+      `Liquidity pair detected.\n\n` +
       `Pair: ${shortenAddress(
         result.address
       )}\n` +
-      `Token 0: ${
-        result.token0 ?? "—"
-      }\n` +
-      `Token 1: ${
-        result.token1 ?? "—"
-      }\n` +
-      `Reserve 0: ${formatNumber(
-        result.reserve0
+      `Token 0: ${shortenAddress(
+        result.token0 ?? "Unknown"
       )}\n` +
-      `Reserve 1: ${formatNumber(
-        result.reserve1
-      )}`
+      `Token 1: ${shortenAddress(
+        result.token1 ?? "Unknown"
+      )}\n\n` +
+      `Send the token CA for a full token scan.`
     );
   }
 
@@ -368,8 +184,9 @@ const formatScanResult = (
   ) {
     return (
       `🐾 POWGUADIAN\n\n` +
-      `Smart Contract\n\n` +
-      `Address\n${result.address}`
+      `Smart contract detected.\n\n` +
+      `Address: ${result.address}\n\n` +
+      `This address could not be verified as an ERC20 token.`
     );
   }
 
@@ -389,217 +206,184 @@ const formatScanResult = (
     security?.riskLevel ??
     "UNKNOWN";
 
+  const name =
+    result.name ??
+    "Unknown Token";
+
+  const symbol =
+    result.symbol ??
+    "TOKEN";
+
   let response =
-    `🐾 POWGUADIAN\n` +
-    `${
-      result.name ??
-      "Unknown Token"
-    } ` +
-    `• ${
-      result.symbol ??
-      "TOKEN"
-    }\n\n`;
-
-  /* TOKEN */
-
-  response +=
-    `Token\n` +
-    `Name: ${
-      result.name ?? "—"
-    }\n` +
-    `Symbol: ${
-      result.symbol ?? "—"
-    }\n` +
+    `🐾 POWGUADIAN\n\n` +
+    `${name} • $${symbol}\n` +
     `CA: ${shortenAddress(
       result.address
     )}\n\n`;
 
-  /* RISK */
-
+  /*
+   * RISK
+   */
   response +=
-    `Risk: ${riskEmoji(
+    `Security: ${riskEmoji(
       risk
-    )} ${risk}\n\n`;
+    )} ${risk}\n`;
 
-  /* MARKET */
-
-  response +=
-    `Market\n` +
-    `Price: ${formatMoney(
-      market?.priceUsd
-    )}\n` +
-    `Market cap: ${formatMoney(
-      market?.marketCap
-    )}\n` +
-    `Liquidity: ${formatMoney(
-      market?.liquidityUsd
-    )}\n` +
-    `24h volume: ${formatMoney(
-      market?.volume24h
-    )}\n` +
-    `Buys / Sells: ${
-      formatNumber(
-        market?.buys24h
-      )
-    } / ${
-      formatNumber(
-        market?.sells24h
-      )
-    }\n\n`;
-
-  /* LIQUIDITY */
-
-  const lpStatus =
-    liquidity?.status ??
-    "UNKNOWN";
-
-  response +=
-    `Liquidity\n` +
-    `DEX: ${
-      market?.dex ?? "—"
-    }\n` +
-    `Pair: ${
-      market?.pairLabel ?? "—"
-    }\n` +
-    `LP status: ${lpStatus}\n` +
-    `LP burned: ${
-      liquidity?.lpBurned
-        ? "Yes"
-        : liquidity?.lpBurnPercent !==
-              null &&
-            liquidity?.lpBurnPercent !==
-              undefined
-          ? `No (${liquidity.lpBurnPercent.toFixed(
-              2
-            )}%)`
-          : "Unknown"
-    }\n` +
-    `Lock: ${
-      liquidity?.lockedUntil
-        ? formatDate(
-            liquidity.lockedUntil
-          )
-        : "—"
-    }\n` +
-    `Remaining: ${formatRemaining(
-      liquidity?.remainingDays
-    )}\n\n`;
-
-  /* HOLDERS */
-
-  response +=
-    `Holders\n` +
-    `Total: ${formatNumber(
-      holders?.holders
-    )}\n` +
-    `Top 1: ${formatPercent(
-      holders?.top1
-    )}\n` +
-    `Top 5: ${formatPercent(
-      holders?.top5
-    )}\n` +
-    `Top 10: ${formatPercent(
-      holders?.top10
-    )}\n` +
-    `Burned: ${formatPercent(
-      holders?.burnedPercent
-    )}\n` +
-    `Owner: ${formatPercent(
-      holders?.ownerHoldingsPercent
-    )}\n\n`;
-
-  /* TRADING */
-
-  response +=
-    `Trading\n` +
-    `Buy tax: ${
-      security?.buyTax !==
-          null &&
-      security?.buyTax !==
-          undefined
-        ? `${security.buyTax}%`
-        : "—"
-    }\n` +
-    `Sell tax: ${
-      security?.sellTax !==
-          null &&
-      security?.sellTax !==
-          undefined
-        ? `${security.sellTax}%`
-        : "—"
-    }\n` +
-    `Transfer tax: ${
-      security?.transferTax !==
-          null &&
-      security?.transferTax !==
-          undefined
-        ? `${security.transferTax}%`
-        : "—"
-    }\n` +
-    `Max TX: ${
-      security?.maxTx ??
-      "—"
-    }\n` +
-    `Max wallet: ${
-      security?.maxWallet ??
-      "—"
-    }\n\n`;
-
-  /* SECURITY */
-
-  response +=
-    `${formatSecurity(
-      result
-    )}\n\n`;
-
-  /* PROJECT */
-
-  response +=
-    `Project\n` +
-    `Telegram: ${
-      market?.telegram ?? "—"
-    }\n` +
-    `Website: ${
-      market?.website ?? "—"
-    }\n` +
-    `X: ${
-      market?.twitter ?? "—"
-    }\n\n`;
-
-  /* LINKS */
-
-  response +=
-    `Links\n` +
-    `BscScan: https://bscscan.com/address/${result.address}\n`;
-
+  /*
+   * MARKET
+   */
   if (
-    market?.pairAddress
+    market &&
+    (
+      market.priceUsd !== null ||
+      market.marketCap !== null ||
+      market.liquidityUsd !== null
+    )
   ) {
     response +=
-      `DexScreener: https://dexscreener.com/bsc/${market.pairAddress}\n`;
+      `Price: ${formatMoney(
+        market.priceUsd
+      )}\n` +
+      `Market Cap: ${formatMoney(
+        market.marketCap
+      )}\n` +
+      `Liquidity: ${formatMoney(
+        market.liquidityUsd
+      )}\n`;
+
+    if (
+      market.volume24h !==
+      null
+    ) {
+      response +=
+        `24h Volume: ${formatMoney(
+          market.volume24h
+        )}\n`;
+    }
+
+    if (
+      market.buys24h !== null ||
+      market.sells24h !== null
+    ) {
+      response +=
+        `Buys / Sells: ` +
+        `${formatNumber(
+          market.buys24h
+        )} / ` +
+        `${formatNumber(
+          market.sells24h
+        )}\n`;
+    }
   }
 
-  response +=
-    `PancakeSwap: https://pancakeswap.finance/swap?outputCurrency=${result.address}\n\n`;
+  /*
+   * LIQUIDITY
+   */
+  if (
+    liquidity &&
+    (
+      liquidity.status !==
+        "UNKNOWN" ||
+      liquidity.lpBurnPercent !==
+        null
+    )
+  ) {
+    response +=
+      `\nLP: `;
 
-  /* SMART SUMMARY */
+    if (
+      liquidity.status ===
+      "BURNED"
+    ) {
+      response +=
+        "Burned";
+    } else if (
+      liquidity.status ===
+      "LOCKED"
+    ) {
+      response +=
+        "Locked";
+    } else if (
+      liquidity.status ===
+      "EXPIRED"
+    ) {
+      response +=
+        "Lock expired";
+    } else {
+      response +=
+        "Unknown";
+    }
 
-  const observations: string[] =
+    if (
+      liquidity.lpBurnPercent !==
+      null
+    ) {
+      response +=
+        ` (${formatPercent(
+          liquidity.lpBurnPercent
+        )})`;
+    }
+
+    response +=
+      `\n`;
+  }
+
+  /*
+   * HOLDERS
+   */
+  if (
+    holders?.holders !==
+      null &&
+    holders?.holders !==
+      undefined
+  ) {
+    response +=
+      `Holders: ${formatNumber(
+        holders.holders
+      )}\n`;
+  }
+
+  /*
+   * TAX
+   */
+  if (
+    security?.buyTax !==
+      null ||
+    security?.sellTax !==
+      null
+  ) {
+    response +=
+      `Tax: ` +
+      `${
+        security?.buyTax !==
+        null &&
+        security?.buyTax !==
+        undefined
+          ? `${security.buyTax}%`
+          : "?"
+      } buy / ` +
+      `${
+        security?.sellTax !==
+        null &&
+        security?.sellTax !==
+        undefined
+          ? `${security.sellTax}%`
+          : "?"
+      } sell\n`;
+  }
+
+  /*
+   * Important security warnings only.
+   */
+  const warnings: string[] =
     [];
 
   if (
-    security?.ownerRenounced
+    security?.canMint ===
+    true
   ) {
-    observations.push(
-      "Ownership is renounced."
-    );
-  }
-
-  if (
-    security?.canMint === true
-  ) {
-    observations.push(
-      "Mint capability detected."
+    warnings.push(
+      "Mint function detected"
     );
   }
 
@@ -607,58 +391,47 @@ const formatScanResult = (
     security?.hasBlacklistFunction ===
     true
   ) {
-    observations.push(
-      "Blacklist functionality detected."
+    warnings.push(
+      "Blacklist function detected"
     );
   }
 
   if (
-    security?.hasTradingControl ===
+    security?.isProxy ===
     true
   ) {
-    observations.push(
-      "Trading-control functionality detected."
+    warnings.push(
+      "Proxy detected"
     );
   }
 
   if (
-    security?.hasTaxFunctions ===
-    true
-  ) {
-    observations.push(
-      "Tax or fee functionality detected."
-    );
-  }
-
-  if (
-    liquidity?.status ===
-    "BURNED"
-  ) {
-    observations.push(
-      "LP tokens appear to be burned."
-    );
-  }
-
-  if (
-    liquidity?.status ===
-    "EXPIRED"
-  ) {
-    observations.push(
-      "Liquidity lock appears expired."
-    );
-  }
-
-  if (
-    observations.length > 0
+    warnings.length > 0
   ) {
     response +=
-      `Analysis\n`;
+      `\n⚠️ ${warnings.join(
+        " • "
+      )}\n`;
+  }
 
-    for (
-      const observation of observations
+  /*
+   * DEX
+   */
+  if (
+    market?.dex ||
+    market?.pairLabel
+  ) {
+    response +=
+      `\nDEX: ${
+        market.dex ??
+        "Unknown"
+      }`;
+
+    if (
+      market.pairLabel
     ) {
       response +=
-        `• ${observation}\n`;
+        ` • ${market.pairLabel}`;
     }
 
     response +=
@@ -666,7 +439,7 @@ const formatScanResult = (
   }
 
   response +=
-    `POWGUADIAN automated analysis. DYOR.`;
+    `\nDYOR • POWGUADIAN`;
 
   return response;
 };
@@ -694,8 +467,7 @@ const scanAddresses =
     }
 
     await ctx.reply(
-      `🔎 POWGUADIAN is analyzing...\n\n` +
-      `Market • Liquidity • Holders • Security`
+      `🔎 POWGUADIAN is scanning...`
     );
 
     for (
@@ -754,17 +526,12 @@ bot.help(
       `/start — Start the bot\n` +
       `/help — Show commands\n` +
       `/scan — Scan a token\n\n` +
-      `Automatic scanning\n\n` +
-      `Send a:\n` +
-      `• Token contract\n` +
-      `• Pair address\n` +
-      `• PancakeSwap link\n` +
-      `• BscScan link\n` +
-      `• DexScreener link\n\n` +
-      `Community moderator\n\n` +
+      `Automatic scanning:\n` +
+      `Send a token CA, pair address, ` +
+      `PancakeSwap link, BscScan link, ` +
+      `or DexScreener link.\n\n` +
       `POWGUADIAN can also answer ` +
-      `community and crypto questions ` +
-      `when appropriate.`
+      `community and crypto questions.`
     );
   }
 );
@@ -827,7 +594,7 @@ bot.on(
 );
 
 /* -------------------------------------------------------------------------- */
-/* COMMUNITY AI MODERATOR + AUTOMATIC SCANNER                                */
+/* COMMUNITY AI MODERATOR + AUTOMATIC SCANNER                                 */
 /* -------------------------------------------------------------------------- */
 
 bot.on(
@@ -850,11 +617,8 @@ bot.on(
     }
 
     /*
-     * Contract addresses always go directly
+     * Any detected address goes directly
      * to the scanner.
-     *
-     * This preserves the existing automatic
-     * scanning behavior.
      */
     const addresses =
       extractAddresses(
@@ -873,11 +637,8 @@ bot.on(
     }
 
     /*
-     * The community intelligence layer decides
-     * whether the message deserves an answer.
-     *
-     * Ordinary messages that don't need moderation
-     * are ignored.
+     * Let the community relevance layer
+     * decide whether the AI should respond.
      */
     if (
       !isCommunityRelevant(
@@ -897,10 +658,6 @@ bot.on(
           text
         );
 
-      /*
-       * The AI can deliberately decide
-       * that no response is necessary.
-       */
       if (
         !answer ||
         answer === "[IGNORE]"

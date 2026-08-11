@@ -242,24 +242,98 @@ export const extractAddresses = (
         ethers.getAddress(address)
       );
     } catch {
-      /*
-       * Ignore invalid addresses.
-       */
+      // Ignore invalid addresses.
     }
   }
 
   return Array.from(uniqueAddresses);
 };
 
+/**
+ * Checks whether an address is a PancakeSwap-style
+ * liquidity pair before attempting ERC20 detection.
+ *
+ * This is important because an LP/pair is also a smart
+ * contract and must never be presented as the token CA.
+ */
+const detectPair = async (
+  address: string
+): Promise<{
+  token0: string;
+  token1: string;
+  reserve0: bigint;
+  reserve1: bigint;
+} | null> => {
+  try {
+    const pair =
+      new ethers.Contract(
+        address,
+        PAIR_ABI,
+        provider
+      );
+
+    const token0 =
+      ethers.getAddress(
+        await pair.token0()
+      );
+
+    const token1 =
+      ethers.getAddress(
+        await pair.token1()
+      );
+
+    const reserves =
+      await pair.getReserves();
+
+    return {
+      token0,
+      token1,
+      reserve0: reserves[0],
+      reserve1: reserves[1],
+    };
+  } catch {
+    return null;
+  }
+};
+
+const getUnderlyingTokenFromPair = (
+  token0: string,
+  token1: string
+): string => {
+  const token0Lower =
+    token0.toLowerCase();
+
+  if (
+    token0Lower ===
+    WBNB_ADDRESS.toLowerCase()
+  ) {
+    return token1;
+  }
+
+  if (
+    token1.toLowerCase() ===
+    WBNB_ADDRESS.toLowerCase()
+  ) {
+    return token0;
+  }
+
+  // For non-WBNB pairs, use token0 as the
+  // deterministic fallback. DexScreener will
+  // later provide the actual market pair.
+  return token0;
+};
+
 const fetchDexScreenerData = async (
   tokenAddress: string
 ): Promise<MarketData> => {
-  const market = emptyMarketData();
+  const market =
+    emptyMarketData();
 
   try {
-    const response = await fetch(
-      `https://api.dexscreener.com/latest/dex/tokens/${tokenAddress}`
-    );
+    const response =
+      await fetch(
+        `https://api.dexscreener.com/latest/dex/tokens/${tokenAddress}`
+      );
 
     if (!response.ok) {
       return market;
@@ -268,9 +342,10 @@ const fetchDexScreenerData = async (
     const data =
       (await response.json()) as DexScreenerResponse;
 
-    const pairs = Array.isArray(data.pairs)
-      ? data.pairs
-      : [];
+    const pairs =
+      Array.isArray(data.pairs)
+        ? data.pairs
+        : [];
 
     const bscPairs =
       pairs.filter(
@@ -279,14 +354,11 @@ const fetchDexScreenerData = async (
           "bsc"
       );
 
-    if (bscPairs.length === 0) {
+    if (
+      bscPairs.length === 0
+    ) {
       return market;
     }
-
-    /*
-     * Prefer the pair with the greatest
-     * liquidity.
-     */
 
     bscPairs.sort(
       (a, b) =>
@@ -320,12 +392,16 @@ const fetchDexScreenerData = async (
 
     market.liquidityUsd =
       pair?.liquidity?.usd != null
-        ? Number(pair.liquidity.usd)
+        ? Number(
+            pair.liquidity.usd
+          )
         : null;
 
     market.volume24h =
       pair?.volume?.h24 != null
-        ? Number(pair.volume.h24)
+        ? Number(
+            pair.volume.h24
+          )
         : null;
 
     market.buys24h =
@@ -356,17 +432,17 @@ const fetchDexScreenerData = async (
 
     market.pairCreatedAt =
       pair?.pairCreatedAt != null
-        ? Number(pair.pairCreatedAt)
+        ? Number(
+            pair.pairCreatedAt
+          )
         : null;
-
-    /*
-     * Project links.
-     */
 
     const websites =
       pair?.info?.websites ?? [];
 
-    for (const website of websites) {
+    for (
+      const website of websites
+    ) {
       if (
         website?.url &&
         !market.website
@@ -379,7 +455,9 @@ const fetchDexScreenerData = async (
     const socials =
       pair?.info?.socials ?? [];
 
-    for (const social of socials) {
+    for (
+      const social of socials
+    ) {
       if (!social?.url) {
         continue;
       }
@@ -407,10 +485,6 @@ const fetchDexScreenerData = async (
       }
     }
 
-    /*
-     * LP ratio.
-     */
-
     if (
       market.marketCap !== null &&
       market.marketCap > 0 &&
@@ -422,11 +496,9 @@ const fetchDexScreenerData = async (
         100;
     }
 
-    /*
-     * Pair enrichment.
-     */
-
-    if (market.pairAddress) {
+    if (
+      market.pairAddress
+    ) {
       await enrichPairData(
         market,
         market.pairAddress
@@ -448,7 +520,9 @@ const enrichPairData = async (
 ): Promise<void> => {
   try {
     if (
-      !ethers.isAddress(pairAddress)
+      !ethers.isAddress(
+        pairAddress
+      )
     ) {
       return;
     }
@@ -473,30 +547,19 @@ const enrichPairData = async (
     const reserves =
       await pair.getReserves();
 
-    const reserve0 =
-      Number(
-        ethers.formatUnits(
-          reserves[0],
-          18
-        )
-      );
-
-    const reserve1 =
-      Number(
-        ethers.formatUnits(
-          reserves[1],
-          18
-        )
-      );
-
-    let wbnbReserve = 0;
+    let wbnbReserve =
+      0;
 
     if (
       token0.toLowerCase() ===
       WBNB_ADDRESS.toLowerCase()
     ) {
       wbnbReserve =
-        reserve0;
+        Number(
+          ethers.formatEther(
+            reserves[0]
+          )
+        );
     }
 
     if (
@@ -504,17 +567,21 @@ const enrichPairData = async (
       WBNB_ADDRESS.toLowerCase()
     ) {
       wbnbReserve =
-        reserve1;
+        Number(
+          ethers.formatEther(
+            reserves[1]
+          )
+        );
     }
 
-    if (wbnbReserve > 0) {
+    if (
+      wbnbReserve > 0
+    ) {
       market.lpBnb =
         wbnbReserve;
     }
   } catch {
-    /*
-     * Pair enrichment is supplementary.
-     */
+    // Pair enrichment is supplementary.
   }
 };
 
@@ -524,7 +591,9 @@ const analyzeLP = async (
   const result =
     emptyLPData();
 
-  if (!market.pairAddress) {
+  if (
+    !market.pairAddress
+  ) {
     return result;
   }
 
@@ -549,15 +618,17 @@ const analyzeLP = async (
       0n;
 
     for (
-      const deadAddress
-      of DEAD_ADDRESSES
+      const deadAddress of
+        DEAD_ADDRESSES
     ) {
       try {
         burnedBalance +=
           await pair.balanceOf(
             deadAddress
           );
-      } catch {}
+      } catch {
+        // Ignore individual dead-address failures.
+      }
     }
 
     if (
@@ -566,8 +637,8 @@ const analyzeLP = async (
       const burnPercent =
         Number(
           ethers.formatUnits(
-            burnedBalance *
-              10000n /
+            (burnedBalance *
+              10000n) /
               lpSupply,
             2
           )
@@ -588,21 +659,8 @@ const analyzeLP = async (
         return result;
       }
     }
-
-    /*
-     * IMPORTANT:
-     *
-     * A pair contract itself does NOT prove
-     * that liquidity is locked.
-     *
-     * Until a recognized locker is detected,
-     * we report UNKNOWN instead of pretending
-     * the LP is locked.
-     */
   } catch {
-    /*
-     * Leave LP status UNKNOWN.
-     */
+    // Leave LP status UNKNOWN.
   }
 
   return result;
@@ -646,17 +704,16 @@ const analyzeHolders = async (
       typeof data?.result ===
         "string"
     ) {
-      result.holders =
+      const holders =
         Number(data.result);
-    }
 
-    /*
-     * Holder concentration requires
-     * holder-balance indexing.
-     *
-     * We intentionally don't fabricate
-     * Top 1 / Top 5 / Top 10 / Top 20.
-     */
+      if (
+        Number.isFinite(holders)
+      ) {
+        result.holders =
+          holders;
+      }
+    }
   } catch (error) {
     console.error(
       "Holder API request failed:",
@@ -664,14 +721,99 @@ const analyzeHolders = async (
     );
   }
 
-  /*
-   * Silence unused parameter warnings
-   * while keeping them available for
-   * future holder calculations.
-   */
-
   void totalSupply;
   void decimals;
+
+  return result;
+};
+
+const readToken = async (
+  address: string
+): Promise<{
+  name?: string;
+  symbol?: string;
+  decimals?: number;
+  totalSupply?: string;
+  hasTokenData: boolean;
+}> => {
+  const token =
+    new ethers.Contract(
+      address,
+      ERC20_ABI,
+      provider
+    );
+
+  let hasTokenData =
+    false;
+
+  const result: {
+    name?: string;
+    symbol?: string;
+    decimals?: number;
+    totalSupply?: string;
+    hasTokenData: boolean;
+  } = {
+    hasTokenData: false,
+  };
+
+  try {
+    result.name =
+      await token.name();
+
+    hasTokenData =
+      true;
+  } catch {
+    // Not an ERC20 name implementation.
+  }
+
+  try {
+    result.symbol =
+      await token.symbol();
+
+    hasTokenData =
+      true;
+  } catch {
+    // Not an ERC20 symbol implementation.
+  }
+
+  try {
+    result.decimals =
+      Number(
+        await token.decimals()
+      );
+
+    hasTokenData =
+      true;
+  } catch {
+    // Decimals unavailable.
+  }
+
+  try {
+    const supply =
+      await token.totalSupply();
+
+    if (
+      result.decimals !==
+      undefined
+    ) {
+      result.totalSupply =
+        ethers.formatUnits(
+          supply,
+          result.decimals
+        );
+    } else {
+      result.totalSupply =
+        supply.toString();
+    }
+
+    hasTokenData =
+      true;
+  } catch {
+    // Total supply unavailable.
+  }
+
+  result.hasTokenData =
+    hasTokenData;
 
   return result;
 };
@@ -695,7 +837,9 @@ export const scanContract = async (
       normalizedAddress
     );
 
-  if (code === "0x") {
+  if (
+    code === "0x"
+  ) {
     return {
       address:
         normalizedAddress,
@@ -704,7 +848,200 @@ export const scanContract = async (
     };
   }
 
-  const result: ScanResult = {
+  /**
+   * IMPORTANT:
+   *
+   * Detect LP/pair contracts BEFORE ERC20 detection.
+   *
+   * A liquidity pair is a smart contract and may expose
+   * functions that can confuse generic token detection.
+   */
+  const pairData =
+    await detectPair(
+      normalizedAddress
+    );
+
+  if (pairData) {
+    const tokenAddress =
+      getUnderlyingTokenFromPair(
+        pairData.token0,
+        pairData.token1
+      );
+
+    const tokenData =
+      await readToken(
+        tokenAddress
+      );
+
+    if (
+      tokenData.hasTokenData
+    ) {
+      const tokenSecurity =
+        await analyzeSecurity(
+          tokenAddress
+        );
+
+      const market =
+        await fetchDexScreenerData(
+          tokenAddress
+        );
+
+      const liquidity =
+        await analyzeLP(
+          market
+        );
+
+      const holders =
+        tokenData.totalSupply &&
+        tokenData.decimals !==
+          undefined
+          ? await analyzeHolders(
+              tokenAddress,
+              tokenData.totalSupply,
+              tokenData.decimals
+            )
+          : emptyHolderData();
+
+      return {
+        address:
+          tokenAddress,
+
+        isContract: true,
+
+        type: "token",
+
+        name:
+          tokenData.name,
+
+        symbol:
+          tokenData.symbol,
+
+        decimals:
+          tokenData.decimals,
+
+        totalSupply:
+          tokenData.totalSupply,
+
+        token0:
+          pairData.token0,
+
+        token1:
+          pairData.token1,
+
+        reserve0:
+          pairData.reserve0.toString(),
+
+        reserve1:
+          pairData.reserve1.toString(),
+
+        security:
+          tokenSecurity,
+
+        market:
+          market.pairAddress
+            ? market
+            : {
+                ...market,
+                pairAddress:
+                  normalizedAddress,
+              },
+
+        liquidity,
+
+        holders,
+      };
+    }
+
+    return {
+      address:
+        normalizedAddress,
+
+      isContract: true,
+
+      type: "pair",
+
+      token0:
+        pairData.token0,
+
+      token1:
+        pairData.token1,
+
+      reserve0:
+        pairData.reserve0.toString(),
+
+      reserve1:
+        pairData.reserve1.toString(),
+    };
+  }
+
+  /**
+   * Normal token contract.
+   */
+  const tokenData =
+    await readToken(
+      normalizedAddress
+    );
+
+  if (
+    tokenData.hasTokenData
+  ) {
+    const security =
+      await analyzeSecurity(
+        normalizedAddress
+      );
+
+    const market =
+      await fetchDexScreenerData(
+        normalizedAddress
+      );
+
+    const liquidity =
+      await analyzeLP(
+        market
+      );
+
+    const holders =
+      tokenData.totalSupply &&
+      tokenData.decimals !==
+        undefined
+        ? await analyzeHolders(
+            normalizedAddress,
+            tokenData.totalSupply,
+            tokenData.decimals
+          )
+        : emptyHolderData();
+
+    return {
+      address:
+        normalizedAddress,
+
+      isContract: true,
+
+      type: "token",
+
+      name:
+        tokenData.name,
+
+      symbol:
+        tokenData.symbol,
+
+      decimals:
+        tokenData.decimals,
+
+      totalSupply:
+        tokenData.totalSupply,
+
+      security,
+
+      market,
+
+      liquidity,
+
+      holders,
+    };
+  }
+
+  return {
     address:
       normalizedAddress,
 
@@ -712,180 +1049,4 @@ export const scanContract = async (
 
     type: "contract",
   };
-
-  const token =
-    new ethers.Contract(
-      normalizedAddress,
-      ERC20_ABI,
-      provider
-    );
-
-  let hasTokenData =
-    false;
-
-  /*
-   * NAME
-   */
-
-  try {
-    result.name =
-      await token.name();
-
-    hasTokenData =
-      true;
-  } catch {}
-
-  /*
-   * SYMBOL
-   */
-
-  try {
-    result.symbol =
-      await token.symbol();
-
-    hasTokenData =
-      true;
-  } catch {}
-
-  /*
-   * DECIMALS
-   */
-
-  try {
-    result.decimals =
-      Number(
-        await token.decimals()
-      );
-
-    hasTokenData =
-      true;
-  } catch {}
-
-  /*
-   * TOTAL SUPPLY
-   */
-
-  try {
-    const supply =
-      await token.totalSupply();
-
-    if (
-      result.decimals !==
-      undefined
-    ) {
-      result.totalSupply =
-        ethers.formatUnits(
-          supply,
-          result.decimals
-        );
-    } else {
-      result.totalSupply =
-        supply.toString();
-    }
-
-    hasTokenData =
-      true;
-  } catch {}
-
-  /*
-   * TOKEN
-   */
-
-  if (hasTokenData) {
-    result.type =
-      "token";
-
-    /*
-     * SECURITY
-     */
-
-    try {
-      result.security =
-        await analyzeSecurity(
-          normalizedAddress
-        );
-    } catch (error) {
-      console.error(
-        "Security analysis failed:",
-        error
-      );
-    }
-
-    /*
-     * MARKET DATA FIRST
-     */
-
-    result.market =
-      await fetchDexScreenerData(
-        normalizedAddress
-      );
-
-    /*
-     * LIQUIDITY / LP
-     */
-
-    result.liquidity =
-      await analyzeLP(
-        result.market
-      );
-
-    /*
-     * HOLDERS
-     */
-
-    if (
-      result.totalSupply &&
-      result.decimals !==
-        undefined
-    ) {
-      result.holders =
-        await analyzeHolders(
-          normalizedAddress,
-          result.totalSupply,
-          result.decimals
-        );
-    } else {
-      result.holders =
-        emptyHolderData();
-    }
-
-    return result;
-  }
-
-  /*
-   * PAIR
-   */
-
-  const pair =
-    new ethers.Contract(
-      normalizedAddress,
-      PAIR_ABI,
-      provider
-    );
-
-  try {
-    result.token0 =
-      await pair.token0();
-
-    result.token1 =
-      await pair.token1();
-
-    const reserves =
-      await pair.getReserves();
-
-    result.reserve0 =
-      reserves[0].toString();
-
-    result.reserve1 =
-      reserves[1].toString();
-
-    result.type =
-      "pair";
-  } catch {
-    /*
-     * Generic smart contract.
-     */
-  }
-
-  return result;
 };

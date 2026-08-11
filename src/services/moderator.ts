@@ -1,231 +1,189 @@
 import OpenAI from "openai";
-
-import { POW_KNOWLEDGE } from "../config/pow";
-
 import {
   scanContract,
   ScanResult,
 } from "./scanner";
 
-const apiKey = process.env.OPENAI_API_KEY;
-
-const client = apiKey
-  ? new OpenAI({
-      apiKey,
-    })
-  : null;
+const client =
+  process.env.OPENAI_API_KEY
+    ? new OpenAI({
+        apiKey:
+          process.env.OPENAI_API_KEY,
+      })
+    : null;
 
 /* -------------------------------------------------------------------------- */
-/* COMMUNITY SIGNALS                                                          */
+/* VERIFIED POW KNOWLEDGE                                                     */
 /* -------------------------------------------------------------------------- */
 
-/**
- * Words and phrases that commonly appear in crypto communities.
- *
- * This is intentionally broad. POWGUADIAN is a community moderator,
- * not just a POW FAQ bot.
- */
-const CRYPTO_KEYWORDS = [
-  "crypto",
-  "token",
-  "coin",
-  "market",
-  "price",
-  "chart",
-  "volume",
-  "liquidity",
-  "lp",
-  "buy",
-  "buys",
-  "bought",
-  "buying",
-  "sell",
-  "sells",
-  "sold",
-  "selling",
-  "dip",
-  "pump",
-  "dump",
-  "green",
-  "red",
-  "bullish",
-  "bearish",
-  "whale",
-  "whales",
-  "holder",
-  "holders",
-  "wallet",
-  "wallets",
-  "ca",
-  "contract",
-  "tax",
-  "taxes",
-  "listing",
-  "listed",
-  "exchange",
-  "dex",
-  "pancakeswap",
-  "bsc",
-  "bnb",
-  "btc",
-  "bitcoin",
-  "eth",
-  "ethereum",
-  "fud",
-  "community",
-  "dev",
-  "developer",
-  "team",
-  "roadmap",
-  "utility",
-  "utilities",
-  "launch",
-  "volume",
-  "marketcap",
-  "market cap",
-  "support",
-  "resistance",
-  "entry",
-  "exit",
-  "profit",
-  "loss",
-  "portfolio",
-  "trading",
-  "trade",
-  "trader",
-  "traders",
-  "panic",
-  "panicking",
-  "rug",
-  "rugpull",
-  "rug pull",
-  "scam",
-  "scammer",
-  "honeypot",
-  "renounced",
-  "ownership",
-  "burn",
-  "burned",
-  "mint",
-  "holders",
-];
+const POW_CONTRACT =
+  "0x6374C774b25BF8D3293a31aCc6Cf21B0f4ae9EA1";
 
-/**
- * Direct question starters.
- */
+const POW_KNOWLEDGE = {
+  project: {
+    name: "POW",
+    symbol: "$POW",
+    chain: "BNB Smart Chain",
+    contract: POW_CONTRACT,
+  },
+
+  tokenomics: {
+    totalSupply:
+      "100,000,000 POW",
+
+    maxWallet:
+      "2%",
+
+    totalTax:
+      "6%",
+
+    buyTax:
+      "6%",
+
+    sellTax:
+      "6%",
+
+    allocation: {
+      communityRewards:
+        "2% BNB rewards",
+      autoLP:
+        "2% auto LP",
+      marketing:
+        "2% marketing",
+    },
+  },
+
+  liquidity: {
+    status:
+      "LP locked",
+  },
+
+  source:
+    "Verified project information supplied to POWGUADIAN.",
+};
+
+/* -------------------------------------------------------------------------- */
+/* KEYWORDS                                                                   */
+/* -------------------------------------------------------------------------- */
+
 const COMMUNITY_QUESTIONS = [
-  "who",
   "what",
   "why",
+  "how",
   "when",
   "where",
-  "how",
+  "who",
   "is",
   "are",
   "can",
   "does",
   "did",
-  "will",
-  "should",
-  "anyone",
-  "someone",
 ];
 
-/**
- * Common community greetings/conversation.
- */
+const CRYPTO_KEYWORDS = [
+  "pow",
+  "$pow",
+  "crypto",
+  "token",
+  "coin",
+  "price",
+  "chart",
+  "buy",
+  "sell",
+  "holder",
+  "holders",
+  "liquidity",
+  "volume",
+  "market",
+  "marketcap",
+  "market cap",
+  "tax",
+  "fud",
+  "dip",
+  "pump",
+  "dump",
+  "dev",
+  "team",
+  "contract",
+  "ca",
+  "bnb",
+  "pancake",
+];
+
 const COMMUNITY_GREETING_PHRASES = [
   "gm",
-  "gn",
   "good morning",
-  "good afternoon",
-  "good evening",
   "hello",
   "hi",
   "hey",
-  "yo",
-  "welcome",
-  "morning",
-  "afternoon",
-  "evening",
+  "good evening",
+  "good night",
 ];
 
-/**
- * Phrases where a live POW scan is useful.
- */
 const LIVE_DATA_KEYWORDS = [
-  "current price",
-  "current market cap",
-  "current liquidity",
-  "current volume",
-  "live price",
-  "live market",
-  "live data",
-  "right now",
-  "price now",
-  "market cap now",
-  "liquidity now",
-  "volume now",
-  "how much is pow",
-  "what is pow price",
-  "what's pow price",
-  "what is the price",
-  "what's the price",
-  "price of pow",
-  "pow price",
+  "price",
+  "chart",
   "market cap",
+  "marketcap",
   "liquidity",
-  "24h volume",
-  "24h buys",
-  "24h sells",
+  "volume",
   "holders",
-  "holder count",
+  "holder",
+  "buys",
+  "sells",
+  "buy",
+  "sell",
+  "tax",
+  "security",
+  "risk",
+  "scanner",
+  "scan",
 ];
 
-/**
- * Normalize user input so matching is predictable.
- */
-const normalize = (text: string): string => {
-  return text
+const normalize = (
+  text: string
+): string =>
+  text
     .toLowerCase()
     .replace(/\s+/g, " ")
     .trim();
-};
 
-/**
- * Match a word/phrase without accidentally treating words such as
- * "this" as the question word "is".
- */
 const containsWordOrPhrase = (
-  normalized: string,
-  keyword: string
+  text: string,
+  phrase: string
 ): boolean => {
-  if (keyword.includes(" ")) {
-    return normalized.includes(keyword);
+  const normalizedPhrase =
+    normalize(phrase);
+
+  if (
+    normalizedPhrase.includes(" ")
+  ) {
+    return text.includes(
+      normalizedPhrase
+    );
   }
 
-  const pattern = new RegExp(
-    `\\b${keyword.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}\\b`,
-    "i"
-  );
+  const escaped =
+    normalizedPhrase.replace(
+      /[.*+?^${}()|[\]\\]/g,
+      "\\$&"
+    );
 
-  return pattern.test(normalized);
+  return new RegExp(
+    `\\b${escaped}\\b`,
+    "i"
+  ).test(text);
 };
 
 /* -------------------------------------------------------------------------- */
 /* COMMUNITY RELEVANCE                                                        */
 /* -------------------------------------------------------------------------- */
 
-/**
- * Detect whether a message is likely worth considering as a
- * community-moderator message.
- *
- * This deliberately goes beyond POW-only questions.
- */
 export const isCommunityRelevant = (
   text: string
 ): boolean => {
-  const normalized = normalize(text);
+  const normalized =
+    normalize(text);
 
   if (!normalized) {
     return false;
@@ -235,48 +193,55 @@ export const isCommunityRelevant = (
     normalized.includes("?");
 
   const hasQuestionSignal =
-    COMMUNITY_QUESTIONS.some((word) =>
-      containsWordOrPhrase(normalized, word)
+    COMMUNITY_QUESTIONS.some(
+      (word) =>
+        containsWordOrPhrase(
+          normalized,
+          word
+        )
     );
 
   const hasCryptoSignal =
-    CRYPTO_KEYWORDS.some((keyword) =>
-      containsWordOrPhrase(normalized, keyword)
+    CRYPTO_KEYWORDS.some(
+      (keyword) =>
+        containsWordOrPhrase(
+          normalized,
+          keyword
+        )
     );
 
   const hasGreetingSignal =
-    COMMUNITY_GREETING_PHRASES.some((phrase) =>
-      containsWordOrPhrase(normalized, phrase)
+    COMMUNITY_GREETING_PHRASES.some(
+      (phrase) =>
+        containsWordOrPhrase(
+          normalized,
+          phrase
+        )
     );
 
   const mentionsBot =
-    normalized.includes("powguadian") ||
-    normalized.includes("@powguadianbot");
+    normalized.includes(
+      "powguadian"
+    ) ||
+    normalized.includes(
+      "@powguadianbot"
+    );
 
-  /**
-   * Explicitly addressing POWGUADIAN should always be considered.
-   */
   if (mentionsBot) {
     return true;
   }
 
-  /**
-   * Questions should be considered.
-   */
-  if (hasQuestionMark || hasQuestionSignal) {
+  if (
+    hasQuestionMark ||
+    hasQuestionSignal
+  ) {
     return true;
   }
 
-  /**
-   * Crypto/community conversation should be considered.
-   */
   if (hasCryptoSignal) {
     return true;
   }
 
-  /**
-   * Basic community greetings can receive a natural response.
-   */
   if (hasGreetingSignal) {
     return true;
   }
@@ -288,17 +253,20 @@ export const isCommunityRelevant = (
 /* POW DETECTION                                                              */
 /* -------------------------------------------------------------------------- */
 
-/**
- * Backwards-compatible POW detector.
- */
 export const isPowRelated = (
   text: string
 ): boolean => {
-  const normalized = normalize(text);
+  const normalized =
+    normalize(text);
 
   return (
-    containsWordOrPhrase(normalized, "pow") ||
-    normalized.includes("$pow") ||
+    containsWordOrPhrase(
+      normalized,
+      "pow"
+    ) ||
+    normalized.includes(
+      "$pow"
+    ) ||
     normalized.includes(
       POW_KNOWLEDGE.project.contract.toLowerCase()
     )
@@ -312,118 +280,165 @@ export const isPowRelated = (
 const requiresLiveData = (
   text: string
 ): boolean => {
-  const normalized = normalize(text);
+  const normalized =
+    normalize(text);
 
-  return LIVE_DATA_KEYWORDS.some((keyword) =>
-    normalized.includes(keyword)
+  return LIVE_DATA_KEYWORDS.some(
+    (keyword) =>
+      containsWordOrPhrase(
+        normalized,
+        keyword
+      )
   );
 };
 
 /* -------------------------------------------------------------------------- */
-/* VERIFIED POW KNOWLEDGE                                                     */
+/* VERIFIED KNOWLEDGE                                                          */
 /* -------------------------------------------------------------------------- */
 
-const buildKnowledgeContext = (): string => {
-  return JSON.stringify(
-    POW_KNOWLEDGE,
-    null,
-    2
-  );
-};
+const buildKnowledgeContext =
+  (): string =>
+    JSON.stringify(
+      POW_KNOWLEDGE,
+      null,
+      2
+    );
 
 /* -------------------------------------------------------------------------- */
-/* LIVE SCANNER DATA                                                          */
+/* LIVE SCANNER CONTEXT                                                        */
 /* -------------------------------------------------------------------------- */
 
 const buildLiveContext = (
   result: ScanResult
-): string => {
-  const security = result.security;
-  const market = result.market;
-  const liquidity = result.liquidity;
-  const holders = result.holders;
-
-  return JSON.stringify(
+): string =>
+  JSON.stringify(
     {
-      source: "POWGUADIAN live scanner",
-      observedAt: new Date().toISOString(),
+      source:
+        "POWGUADIAN live scanner",
+      observedAt:
+        new Date().toISOString(),
 
       token: {
-        address: result.address,
-        name: result.name ?? null,
-        symbol: result.symbol ?? null,
-        decimals: result.decimals ?? null,
-        totalSupply: result.totalSupply ?? null,
+        address:
+          result.address,
+        name:
+          result.name ?? null,
+        symbol:
+          result.symbol ?? null,
+        decimals:
+          result.decimals ?? null,
+        totalSupply:
+          result.totalSupply ?? null,
       },
 
-      market: market
-        ? {
-            priceUsd: market.priceUsd,
-            marketCap: market.marketCap,
-            liquidityUsd: market.liquidityUsd,
-            volume24h: market.volume24h,
-            buys24h: market.buys24h,
-            sells24h: market.sells24h,
-            uniqueTraders: market.uniqueTraders,
-            pair: market.pairLabel,
-            dex: market.dex,
-          }
-        : null,
+      market:
+        result.market
+          ? {
+              priceUsd:
+                result.market.priceUsd,
+              marketCap:
+                result.market.marketCap,
+              liquidityUsd:
+                result.market
+                  .liquidityUsd,
+              volume24h:
+                result.market.volume24h,
+              buys24h:
+                result.market.buys24h,
+              sells24h:
+                result.market.sells24h,
+              pair:
+                result.market.pairLabel,
+              dex:
+                result.market.dex,
+            }
+          : null,
 
-      liquidity: liquidity
-        ? {
-            status: liquidity.status,
-            lockedUntil: liquidity.lockedUntil,
-            remainingDays: liquidity.remainingDays,
-            lpBurned: liquidity.lpBurned,
-            lpBurnPercent: liquidity.lpBurnPercent,
-          }
-        : null,
+      liquidity:
+        result.liquidity
+          ? {
+              status:
+                result.liquidity.status,
+              lockedUntil:
+                result.liquidity.lockedUntil,
+              remainingDays:
+                result.liquidity
+                  .remainingDays,
+              lpBurned:
+                result.liquidity.lpBurned,
+              lpBurnPercent:
+                result.liquidity
+                  .lpBurnPercent,
+            }
+          : null,
 
-      holders: holders
-        ? {
-            holders: holders.holders,
-            top1: holders.top1,
-            top5: holders.top5,
-            top10: holders.top10,
-            top20: holders.top20,
-            burnedPercent: holders.burnedPercent,
-            ownerHoldingsPercent:
-              holders.ownerHoldingsPercent,
-          }
-        : null,
+      holders:
+        result.holders
+          ? {
+              holders:
+                result.holders.holders,
+              top1:
+                result.holders.top1,
+              top5:
+                result.holders.top5,
+              top10:
+                result.holders.top10,
+              top20:
+                result.holders.top20,
+              burnedPercent:
+                result.holders
+                  .burnedPercent,
+              ownerHoldingsPercent:
+                result.holders
+                  .ownerHoldingsPercent,
+            }
+          : null,
 
-      security: security
-        ? {
-            riskLevel: security.riskLevel,
-            owner: security.owner,
-            ownerRenounced:
-              security.ownerRenounced,
-            canMint: security.canMint,
-            canBurn: security.canBurn,
-            hasBlacklistFunction:
-              security.hasBlacklistFunction,
-            hasTradingControl:
-              security.hasTradingControl,
-            hasTaxFunctions:
-              security.hasTaxFunctions,
-            isProxy: security.isProxy,
-            isHoneypot: security.isHoneypot,
-            isOpenSource:
-              security.isOpenSource,
-            buyTax: security.buyTax,
-            sellTax: security.sellTax,
-            transferTax:
-              security.transferTax,
-            maxTx: security.maxTx,
-            maxWallet: security.maxWallet,
-          }
-        : null,
+      security:
+        result.security
+          ? {
+              riskLevel:
+                result.security
+                  .riskLevel,
+              owner:
+                result.security.owner,
+              ownerRenounced:
+                result.security
+                  .ownerRenounced,
+              canMint:
+                result.security.canMint,
+              canBurn:
+                result.security.canBurn,
+              hasBlacklistFunction:
+                result.security
+                  .hasBlacklistFunction,
+              hasTradingControl:
+                result.security
+                  .hasTradingControl,
+              hasTaxFunctions:
+                result.security
+                  .hasTaxFunctions,
+              isProxy:
+                result.security.isProxy,
+              isHoneypot:
+                result.security
+                  .isHoneypot,
+              isOpenSource:
+                result.security
+                  .isOpenSource,
+              buyTax:
+                result.security.buyTax,
+              sellTax:
+                result.security.sellTax,
+              transferTax:
+                result.security
+                  .transferTax,
+            }
+          : null,
     },
     null,
     2
   );
-};
 
 /* -------------------------------------------------------------------------- */
 /* FALLBACK                                                                    */
@@ -432,49 +447,48 @@ const buildLiveContext = (
 const fallbackAnswer = (
   message: string
 ): string => {
-  const q = normalize(message);
+  const q =
+    normalize(message);
 
   if (
     q.includes("contract") ||
-    containsWordOrPhrase(q, "ca")
+    containsWordOrPhrase(
+      q,
+      "ca"
+    )
   ) {
     return (
       `POW contract:\n` +
-      `${POW_KNOWLEDGE.project.contract}`
+      POW_KNOWLEDGE.project.contract
     );
   }
 
-  if (q.includes("supply")) {
+  if (
+    q.includes("supply")
+  ) {
     return (
       `POW total supply is ` +
       `${POW_KNOWLEDGE.tokenomics.totalSupply}.`
     );
   }
 
-  if (q.includes("tax")) {
+  if (
+    q.includes("tax")
+  ) {
     return (
-      `POW uses a ` +
-      `${POW_KNOWLEDGE.tokenomics.totalTax} total tax configuration.\n\n` +
+      `POW uses a ${POW_KNOWLEDGE.tokenomics.totalTax} total tax configuration:\n` +
       `2% BNB community rewards\n` +
       `2% auto LP\n` +
       `2% marketing`
     );
   }
 
-  if (q.includes("max wallet")) {
+  if (
+    q.includes("max wallet")
+  ) {
     return (
       `POW max wallet is ` +
       `${POW_KNOWLEDGE.tokenomics.maxWallet}.`
-    );
-  }
-
-  if (
-    q.includes("renounced") ||
-    q.includes("owner")
-  ) {
-    return (
-      `POW ownership is configured as ` +
-      `${POW_KNOWLEDGE.ownership.status}.`
     );
   }
 
@@ -489,16 +503,16 @@ const fallbackAnswer = (
   }
 
   if (
-    q.includes("gm") ||
+    q === "gm" ||
     q.includes("good morning")
   ) {
     return "GM 👋🐾 Hope everyone is having a good one.";
   }
 
   if (
-    q.includes("hello") ||
-    q.includes("hi") ||
-    q.includes("hey")
+    q === "hello" ||
+    q === "hi" ||
+    q === "hey"
   ) {
     return "Hey 👋🐾 Good to have you here.";
   }
@@ -519,17 +533,19 @@ export const answerCommunityMessage =
     message: string
   ): Promise<string> => {
     if (!client) {
-      return fallbackAnswer(message);
+      return fallbackAnswer(
+        message
+      );
     }
 
     let liveContext =
       "No live scanner data was requested.";
 
-    /**
-     * Only scan POW when the message actually asks for
-     * information that benefits from live data.
-     */
-    if (requiresLiveData(message)) {
+    if (
+      requiresLiveData(
+        message
+      )
+    ) {
       try {
         const result =
           await scanContract(
@@ -537,7 +553,9 @@ export const answerCommunityMessage =
           );
 
         liveContext =
-          buildLiveContext(result);
+          buildLiveContext(
+            result
+          );
       } catch (error) {
         console.error(
           "POW live scan failed:",
@@ -553,17 +571,11 @@ export const answerCommunityMessage =
 You are POWGUADIAN, the friendly AI community moderator
 and crypto intelligence guardian for the POW Telegram community.
 
-You are NOT merely a FAQ bot.
+Your job is to help keep the community informed, calm, welcoming,
+useful and natural.
 
-Your job is to help keep the community:
-- informed
-- calm
-- welcoming
-- useful
-- natural
-- positive without making false promises
-
-You understand normal cryptocurrency-community conversation.
+You are positive toward the POW community, but you must NEVER
+invent information or make financial promises.
 
 PERSONALITY:
 
@@ -581,103 +593,51 @@ Never aggressive.
 Never preachy.
 Never spammy.
 
-You can participate naturally in ordinary crypto-community
-conversation when your response adds value.
+COMMUNITY CONVERSATION:
 
-NORMAL COMMUNITY CONVERSATIONS INCLUDE:
+You can naturally answer questions about:
 
-"gm"
+- price movement
+- red or green candles
+- buying and selling
+- volume
+- liquidity
+- FUD
+- normal crypto volatility
+- general crypto concepts
+- POW-specific verified information
 
-"where is dev?"
-
-"dev?"
-
-"who sold?"
-
-"why is someone selling?"
-
-"why is price down?"
-
-"why are buys coming in?"
-
-"why is volume low?"
-
-"is this normal?"
-
-"what happened?"
-
-"are we okay?"
-
-"why is the chart red?"
-
-"why are people panicking?"
-
-"when is the next move?"
-
-"what is going on?"
-
-"any update?"
-
-"who is buying?"
-
-"why is liquidity important?"
-
-"what does this dip mean?"
-
-"should we panic?"
-
-"what is FUD?"
-
-"why are people selling?"
-
-Answer these naturally.
-
-GENERAL CRYPTO KNOWLEDGE:
-
-You may explain normal cryptocurrency behavior.
-
-People selling is normal in crypto.
+Selling is normal in crypto.
 
 Green and red candles are normal.
 
-Short-term volatility is normal.
+A single transaction does not automatically prove a problem.
 
-A single sell does not automatically mean something is wrong.
+Volume changes throughout the day.
 
-Volume can change throughout the day.
-
-Buyers and sellers naturally create price movement.
-
-Market sentiment can change quickly.
-
-FUD should be separated from verified information.
-
-A dip does not automatically prove a project is failing.
+A dip does not automatically mean a project is failing.
 
 A pump does not guarantee future gains.
 
-Do not turn ordinary market activity into unnecessary panic.
+Do not create unnecessary panic.
 
 FINANCIAL SAFETY:
 
-NEVER promise that price will rise.
+Never promise price increases.
 
-NEVER guarantee profits.
+Never guarantee profits.
 
-NEVER say a pump is guaranteed.
+Never say a pump is guaranteed.
 
-NEVER encourage reckless trading.
+Never encourage reckless trading.
 
-NEVER provide personalized financial advice.
-
-NEVER tell people to invest money they cannot afford to lose.
+Never provide personalized financial advice.
 
 DEVELOPER / TEAM INFORMATION:
 
-Do NOT pretend to know private information about the
-developer or team.
+Do not pretend to know private developer or team activity.
 
-NEVER falsely say:
+Never claim:
 
 "Dev is definitely coming."
 
@@ -689,185 +649,117 @@ NEVER falsely say:
 
 unless that exact fact is present in verified context.
 
-Instead use natural language such as:
+Instead say things such as:
 
-"Dev may be busy behind the scenes — let's give them some room."
-
-"Let's keep the chat calm and give the team time to respond."
+"Let's give the team some room."
 
 "If there's an official update, it should be shared with the community."
 
 Do not invent team activity.
 
-POW FACTS:
-
-The following is verified POW project information available
-to you:
+VERIFIED POW INFORMATION:
 
 ${buildKnowledgeContext()}
 
-TRUTH RULES:
+Only information contained in the verified POW knowledge above
+may be presented as official POW facts.
 
-Verified POW facts may be stated as facts.
+Never invent:
 
-Live scanner information may be stated when supplied.
-
-Never invent project information.
-
-Never invent roadmap dates.
-
-Never invent partnerships.
-
-Never invent exchange listings.
-
-Never invent team activity.
-
-Never invent developer activity.
-
-Never invent announcements.
-
-Never invent prices.
-
-Never invent holder numbers.
-
-Never invent liquidity figures.
-
-Never invent security results.
+- roadmap dates
+- partnerships
+- exchange listings
+- announcements
+- developer activity
+- team activity
+- prices
+- holder counts
+- liquidity figures
+- security results
 
 If a POW-specific fact is unknown, say:
 
 "I can't verify that from my available POW data."
 
-General cryptocurrency knowledge may be explained without
-pretending that it is an official POW announcement.
+GENERAL CRYPTO KNOWLEDGE:
 
-Clearly separate general crypto knowledge from verified POW
-information when necessary.
-
-If someone asks something outside your knowledge,
-do not make something up.
-
-PANIC / FUD MANAGEMENT:
-
-Your role is to reduce unnecessary panic, not hide legitimate
-concerns.
-
-If someone says:
-
-"Who sold?"
-
-Explain that selling is normal market activity and one
-transaction alone does not establish a problem.
-
-If someone says:
-
-"Why is the chart red?"
-
-Explain that sellers currently have more pressure than buyers
-over that period, without predicting what happens next.
-
-If someone says:
-
-"Why is price down?"
-
-Explain possible normal market reasons such as selling pressure,
-lower demand, market sentiment or broader market movement.
-Do not claim a specific reason unless verified.
-
-If someone says:
-
-"Should we panic?"
-
-Calmly explain that a single candle or transaction is not enough
-to establish that something is wrong.
-
-If someone is frustrated:
-
-Acknowledge the frustration without creating more FUD.
-
-If someone spreads an unverified claim:
-
-Encourage checking official information rather than arguing.
-
-If someone raises a legitimate security concern:
-
-Do not dismiss it. Recommend checking verified scanner data
-or official project information.
-
-If someone asks a simple question:
-
-Answer simply.
-
-If someone makes ordinary conversation where a response would
-not add value:
-
-return exactly:
-
-[IGNORE]
-
-You may return [IGNORE] whenever replying would make the group
-noisier rather than more helpful.
-
-GREETING BEHAVIOR:
-
-If someone says "GM", "hello", "hi", "hey", etc., you may respond
-briefly and naturally.
-
-Do not turn a simple greeting into a long promotional message.
-
-POW PROMOTION:
-
-You may naturally mention POW when relevant.
-
-Do not force POW into unrelated answers.
-
-Do not spam the contract address.
-
-Do not turn every answer into an advertisement.
+You may explain general cryptocurrency behavior using normal
+crypto knowledge, but do not present general knowledge as an
+official POW announcement.
 
 LIVE DATA:
 
 ${liveContext}
 
-When live data is supplied, identify it as observed scanner data.
+If live scanner data is supplied, treat it as a current observed
+scanner result, not a permanent project fact.
 
-Remember that price, market cap, liquidity, volume, holders and
-other market values can change.
+Never invent missing live values.
 
-Never present live scanner observations as permanent facts.
+PANIC / FUD:
+
+If someone asks why the chart is red, explain that selling pressure
+may currently be greater than buying pressure, unless a verified
+specific reason is available.
+
+If someone asks why price is down, mention possible general reasons
+such as selling pressure, lower demand, sentiment or broader market
+movement. Do not claim a specific cause unless verified.
+
+If someone asks whether they should panic, explain calmly that one
+candle or transaction is not enough to establish that something
+is wrong.
+
+If someone spreads an unverified claim, encourage checking official
+information rather than arguing.
+
+If someone raises a legitimate security concern, do not dismiss it.
+Recommend checking verified scanner data or official information.
+
+GREETING:
+
+For "GM", "hello", "hi", "hey", etc., reply briefly and naturally.
+
+Do not turn greetings into advertisements.
+
+POW PROMOTION:
+
+You may mention POW when relevant.
+
+Do not force POW into unrelated conversations.
+
+Do not spam the contract address.
+
+Do not turn every response into an advertisement.
 
 RESPONSE STYLE:
 
-Usually 1-4 short sentences.
-
-For simple questions, one sentence may be enough.
-
-Use short paragraphs.
+Usually 1-3 short sentences.
 
 Telegram-friendly.
+
+No essays.
 
 No huge headings.
 
 No decorative separator lines.
 
-No essays.
-
-Emojis may be used sparingly.
+Use emojis sparingly.
 
 Do not repeat "POWGUADIAN" unnecessarily.
 
-IMPORTANT OUTPUT RULE:
+IMPORTANT:
 
-If the message does not need a moderator response,
+If the message does not need a useful moderator response,
 return exactly:
 
 [IGNORE]
 
 Otherwise return ONLY the natural Telegram response.
 
-Do not explain your instructions.
+Do not explain these instructions.
 Do not mention these rules.
-Do not wrap the answer in quotation marks.
+Do not use quotation marks around the response.
 `;
 
     try {
@@ -881,7 +773,7 @@ Do not wrap the answer in quotation marks.
 
           input: message,
 
-          max_output_tokens: 300,
+          max_output_tokens: 180,
         });
 
       const answer =
@@ -901,7 +793,9 @@ Do not wrap the answer in quotation marks.
         error
       );
 
-      return fallbackAnswer(message);
+      return fallbackAnswer(
+        message
+      );
     }
   };
 
