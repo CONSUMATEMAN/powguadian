@@ -442,14 +442,6 @@ const formatScanResult = (
     response +=
       `\n`;
 
-    /*
-     * IMPORTANT:
-     *
-     * market is optional on ScanResult.
-     * Narrow it once before accessing its
-     * token pool fields.
-     */
-
     if (
       market
     ) {
@@ -596,8 +588,6 @@ const formatScanResult = (
 
   /*
    * SECURITY FINDINGS
-   *
-   * Only display meaningful detected capabilities.
    */
 
   const warnings: string[] =
@@ -654,6 +644,24 @@ const formatScanResult = (
   ) {
     warnings.push(
       "Pausable"
+    );
+  }
+
+  if (
+    security?.isHoneypot ===
+    true
+  ) {
+    warnings.push(
+      "Potential honeypot"
+    );
+  }
+
+  if (
+    security?.canBurn ===
+    true
+  ) {
+    warnings.push(
+      "Burn function"
     );
   }
 

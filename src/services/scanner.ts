@@ -322,36 +322,33 @@ const emptyHolderData =
     ownerHoldingsPercent: null,
   });
 
-export const extractAddresses =
-  (
-    text: string
-  ): string[] => {
-    const matches =
-      text.match(
-        /0x[a-fA-F0-9]{40}/g
-      ) ?? [];
+export const extractAddresses = (
+  text: string
+): string[] => {
+  const matches =
+    text.match(
+      /0x[a-fA-F0-9]{40}/g
+    ) ?? [];
 
-    const uniqueAddresses =
-      new Set<string>();
+  const uniqueAddresses =
+    new Set<string>();
 
-    for (
-      const address of matches
-    ) {
-      try {
-        uniqueAddresses.add(
-          ethers.getAddress(
-            address
-          )
-        );
-      } catch {
-        // Ignore invalid addresses.
-      }
+  for (
+    const address of matches
+  ) {
+    try {
+      uniqueAddresses.add(
+        ethers.getAddress(address)
+      );
+    } catch {
+      // Ignore invalid addresses.
     }
+  }
 
-    return Array.from(
-      uniqueAddresses
-    );
-  };
+  return Array.from(
+    uniqueAddresses
+  );
+};
 
 const getBscScanApiKey =
   (): string | null => {
@@ -364,68 +361,66 @@ const getBscScanApiKey =
       : null;
   };
 
-const detectPair =
-  async (
-    address: string
-  ): Promise<{
-    token0: string;
-    token1: string;
-    reserve0: bigint;
-    reserve1: bigint;
-  } | null> => {
-    try {
-      const pair =
-        new ethers.Contract(
-          address,
-          PAIR_ABI,
-          provider
-        );
+const detectPair = async (
+  address: string
+): Promise<{
+  token0: string;
+  token1: string;
+  reserve0: bigint;
+  reserve1: bigint;
+} | null> => {
+  try {
+    const pair =
+      new ethers.Contract(
+        address,
+        PAIR_ABI,
+        provider
+      );
 
-      const token0 =
-        ethers.getAddress(
-          await pair.token0()
-        );
+    const token0 =
+      ethers.getAddress(
+        await pair.token0()
+      );
 
-      const token1 =
-        ethers.getAddress(
-          await pair.token1()
-        );
+    const token1 =
+      ethers.getAddress(
+        await pair.token1()
+      );
 
-      const reserves =
-        await pair.getReserves();
+    const reserves =
+      await pair.getReserves();
 
-      return {
-        token0,
-        token1,
-        reserve0: reserves[0],
-        reserve1: reserves[1],
-      };
-    } catch {
-      return null;
-    }
-  };
+    return {
+      token0,
+      token1,
+      reserve0: reserves[0],
+      reserve1: reserves[1],
+    };
+  } catch {
+    return null;
+  }
+};
 
-const getUnderlyingTokenFromPair =
-  (
-    token0: string,
-    token1: string
-  ): string => {
-    if (
-      token0.toLowerCase() ===
-      WBNB_ADDRESS.toLowerCase()
-    ) {
-      return token1;
-    }
+const getUnderlyingTokenFromPair = (
+  token0: string,
+  token1: string
+): string => {
+  if (
+    token0.toLowerCase() ===
+    WBNB_ADDRESS.toLowerCase()
+  ) {
+    return token1;
+  }
 
-    if (
-      token1.toLowerCase() ===
-      WBNB_ADDRESS.toLowerCase()
-    ) {
-      return token0;
-    }
-
+  if (
+    token1.toLowerCase() ===
+    WBNB_ADDRESS.toLowerCase()
+  ) {
     return token0;
-  };
+  }
+
+  return token0;
+};
 
 const fetchDexScreenerData =
   async (
@@ -516,9 +511,7 @@ const fetchDexScreenerData =
           Number(totalSupply);
 
         if (
-          Number.isFinite(
-            supply
-          )
+          Number.isFinite(supply)
         ) {
           market.marketCap =
             market.priceUsd *
@@ -757,11 +750,8 @@ const enrichPairData =
       const reserves =
         await pair.getReserves();
 
-      let wbnbReserve =
-        0;
-
-      let tokenReserve =
-        0n;
+      let wbnbReserve = 0;
+      let tokenReserve = 0n;
 
       if (
         token0.toLowerCase() ===
@@ -822,13 +812,9 @@ const enrichPairData =
             )
           );
 
-        if (
-          totalSupply
-        ) {
+        if (totalSupply) {
           const supply =
-            Number(
-              totalSupply
-            );
+            Number(totalSupply);
 
           if (
             Number.isFinite(
@@ -872,7 +858,7 @@ const getContractSource =
 
     try {
       const url =
-        `https://api.bscscan.com/api` +
+        "https://api.bscscan.com/api" +
         `?module=contract` +
         `&action=getsourcecode` +
         `&address=${address}` +
@@ -933,9 +919,7 @@ const extractSocialLinks =
     const result =
       emptySocialLinks();
 
-    if (
-      !sourceCode
-    ) {
+    if (!sourceCode) {
       return result;
     }
 
@@ -970,52 +954,39 @@ const extractSocialLinks =
         result.twitter =
           url;
       } else if (
-        lower.includes(
-          "t.me"
-        ) ||
-        lower.includes(
-          "telegram.me"
-        ) ||
-        lower.includes(
-          "telegram."
-        )
+        lower.includes("t.me") ||
+        lower.includes("telegram.me") ||
+        lower.includes("telegram.")
       ) {
-        if (
-          !result.telegram
-        ) {
+        if (!result.telegram) {
           result.telegram =
             url;
         }
       } else if (
-        lower.includes(
-          "discord"
-        ) &&
+        lower.includes("discord") &&
         !result.discord
       ) {
         result.discord =
           url;
       } else if (
-        lower.includes(
-          "github.com"
-        ) &&
+        lower.includes("github.com") &&
         !result.github
       ) {
         result.github =
           url;
       } else if (
-        lower.includes(
-          "youtube.com"
-        ) ||
-        lower.includes(
-          "youtu.be"
-        )
+        (
+          lower.includes(
+            "youtube.com"
+          ) ||
+          lower.includes(
+            "youtu.be"
+          )
+        ) &&
+        !result.youtube
       ) {
-        if (
-          !result.youtube
-        ) {
-          result.youtube =
-            url;
-        }
+        result.youtube =
+          url;
       } else if (
         lower.includes(
           "instagram.com"
@@ -1163,7 +1134,7 @@ const getBscScanHolders =
 
     try {
       const url =
-        `https://api.bscscan.com/api` +
+        "https://api.bscscan.com/api" +
         `?module=token` +
         `&action=tokenholderlist` +
         `&contractaddress=${tokenAddress}` +
@@ -1256,10 +1227,7 @@ const analyzeLP =
         const burnPercent =
           Number(
             ethers.formatUnits(
-              (
-                burnedBalance *
-                10000n
-              ) /
+              burnedBalance * 10000n /
                 lpSupply,
               2
             )
@@ -1435,16 +1403,14 @@ const analyzeHolders =
 
     try {
       const countUrl =
-        `https://api.bscscan.com/api` +
+        "https://api.bscscan.com/api" +
         `?module=token` +
         `&action=tokenholdercount` +
         `&contractaddress=${tokenAddress}` +
         `&apikey=${apiKey}`;
 
       const countResponse =
-        await fetch(
-          countUrl
-        );
+        await fetch(countUrl);
 
       if (
         countResponse.ok
@@ -1453,8 +1419,7 @@ const analyzeHolders =
           (await countResponse.json()) as BscScanResponse;
 
         if (
-          countData?.status ===
-            "1" &&
+          countData?.status === "1" &&
           typeof countData.result ===
             "string"
         ) {
@@ -1482,9 +1447,7 @@ const analyzeHolders =
         );
 
       const supply =
-        Number(
-          totalSupply
-        );
+        Number(totalSupply);
 
       if (
         !Number.isFinite(
@@ -1553,9 +1516,7 @@ const analyzeHolders =
         }
 
         const rawBalance =
-          Number(
-            quantity
-          );
+          Number(quantity);
 
         const balance =
           rawBalance /
@@ -1630,8 +1591,7 @@ const analyzeHolders =
       result.top20 =
         runningPercent;
 
-      let burned =
-        0;
+      let burned = 0;
 
       for (
         const holder of
@@ -1661,9 +1621,7 @@ const analyzeHolders =
           )
         ) {
           const balance =
-            Number(
-              quantity
-            ) /
+            Number(quantity) /
             10 ** decimals;
 
           if (
@@ -1712,9 +1670,7 @@ const analyzeHolders =
               ownerAddress.toLowerCase()
           ) {
             const balance =
-              Number(
-                quantity
-              ) /
+              Number(quantity) /
               10 ** decimals;
 
             if (
@@ -1934,7 +1890,8 @@ export const scanContract =
             source.sourceCode
           );
 
-        const marketSocials: SocialLinks = {
+        const marketSocials:
+          SocialLinks = {
           website:
             market.website,
           telegram:
@@ -2092,7 +2049,8 @@ export const scanContract =
           source.sourceCode
         );
 
-      const marketSocials: SocialLinks = {
+      const marketSocials:
+        SocialLinks = {
         website:
           market.website,
         telegram:
