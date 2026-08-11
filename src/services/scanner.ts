@@ -5,9 +5,10 @@ import {
   SecurityResult,
 } from "./security";
 
-const provider = new ethers.JsonRpcProvider(
-  config.bscRpcUrl
-);
+const provider =
+  new ethers.JsonRpcProvider(
+    config.bscRpcUrl
+  );
 
 const ERC20_ABI = [
   "function name() view returns (string)",
@@ -23,6 +24,14 @@ const PAIR_ABI = [
   "function getReserves() view returns (uint112,uint112,uint32)",
   "function totalSupply() view returns (uint256)",
   "function balanceOf(address) view returns (uint256)",
+];
+
+const LOCKER_ABI = [
+  "function unlockTime() view returns (uint256)",
+  "function lockEndTime() view returns (uint256)",
+  "function endTime() view returns (uint256)",
+  "function getUnlockTime() view returns (uint256)",
+  "function lockedUntil() view returns (uint256)",
 ];
 
 const WBNB_ADDRESS =
@@ -91,7 +100,34 @@ interface DexScreenerResponse {
 interface BscScanResponse {
   status?: string;
   message?: string;
-  result?: string | string[];
+  result?: unknown;
+}
+
+interface BscScanHolder {
+  TokenHolderAddress?: string;
+  TokenHolderQuantity?: string;
+  address?: string;
+  quantity?: string;
+}
+
+interface BscScanSource {
+  SourceCode?: string;
+  ContractName?: string;
+  ABI?: string;
+  Proxy?: string;
+  Implementation?: string;
+}
+
+interface SocialLinks {
+  website: string | null;
+  telegram: string | null;
+  twitter: string | null;
+  discord: string | null;
+  github: string | null;
+  youtube: string | null;
+  instagram: string | null;
+  facebook: string | null;
+  tiktok: string | null;
 }
 
 export interface MarketData {
@@ -115,9 +151,18 @@ export interface MarketData {
   lpBnb: number | null;
   lpRatio: number | null;
 
+  tokenReserve: number | null;
+  tokenInPoolPercent: number | null;
+
   website: string | null;
   telegram: string | null;
   twitter: string | null;
+  discord: string | null;
+  github: string | null;
+  youtube: string | null;
+  instagram: string | null;
+  facebook: string | null;
+  tiktok: string | null;
 }
 
 export interface LPData {
@@ -133,6 +178,16 @@ export interface LPData {
 
   lpBurned: boolean;
   lpBurnPercent: number | null;
+
+  lpAmount: number | null;
+  lpTotalSupply: string | null;
+
+  lockProvider: string | null;
+}
+
+export interface TopHolder {
+  address: string;
+  percent: number;
 }
 
 export interface HolderData {
@@ -142,6 +197,8 @@ export interface HolderData {
   top5: number | null;
   top10: number | null;
   top20: number | null;
+
+  topHolders: TopHolder[];
 
   burnedPercent: number | null;
   ownerHoldingsPercent: number | null;
@@ -176,714 +233,1835 @@ export interface ScanResult {
   liquidity?: LPData;
 
   holders?: HolderData;
+
+  socials?: SocialLinks;
+
+  sourceVerified?: boolean;
+
+  launchTime?: number | null;
 }
 
-const emptyMarketData = (): MarketData => ({
-  priceUsd: null,
-  marketCap: null,
-  liquidityUsd: null,
+const emptySocialLinks =
+  (): SocialLinks => ({
+    website: null,
+    telegram: null,
+    twitter: null,
+    discord: null,
+    github: null,
+    youtube: null,
+    instagram: null,
+    facebook: null,
+    tiktok: null,
+  });
 
-  volume24h: null,
-  buys24h: null,
-  sells24h: null,
-  uniqueTraders: null,
+const emptyMarketData =
+  (): MarketData => ({
+    priceUsd: null,
+    marketCap: null,
+    liquidityUsd: null,
 
-  pairAddress: null,
-  dex: null,
-  pairLabel: null,
+    volume24h: null,
+    buys24h: null,
+    sells24h: null,
+    uniqueTraders: null,
 
-  pairCreatedAt: null,
+    pairAddress: null,
+    dex: null,
+    pairLabel: null,
 
-  priceNative: null,
+    pairCreatedAt: null,
 
-  lpBnb: null,
-  lpRatio: null,
+    priceNative: null,
 
-  website: null,
-  telegram: null,
-  twitter: null,
-});
+    lpBnb: null,
+    lpRatio: null,
 
-const emptyLPData = (): LPData => ({
-  status: "UNKNOWN",
+    tokenReserve: null,
+    tokenInPoolPercent: null,
 
-  lockedUntil: null,
-  durationDays: null,
-  remainingDays: null,
+    website: null,
+    telegram: null,
+    twitter: null,
+    discord: null,
+    github: null,
+    youtube: null,
+    instagram: null,
+    facebook: null,
+    tiktok: null,
+  });
 
-  lpBurned: false,
-  lpBurnPercent: null,
-});
+const emptyLPData =
+  (): LPData => ({
+    status: "UNKNOWN",
 
-const emptyHolderData = (): HolderData => ({
-  holders: null,
+    lockedUntil: null,
+    durationDays: null,
+    remainingDays: null,
 
-  top1: null,
-  top5: null,
-  top10: null,
-  top20: null,
+    lpBurned: false,
+    lpBurnPercent: null,
 
-  burnedPercent: null,
-  ownerHoldingsPercent: null,
-});
+    lpAmount: null,
+    lpTotalSupply: null,
 
-export const extractAddresses = (
-  text: string
-): string[] => {
-  const matches =
-    text.match(/0x[a-fA-F0-9]{40}/g) ?? [];
+    lockProvider: null,
+  });
 
-  const uniqueAddresses =
-    new Set<string>();
+const emptyHolderData =
+  (): HolderData => ({
+    holders: null,
 
-  for (const address of matches) {
+    top1: null,
+    top5: null,
+    top10: null,
+    top20: null,
+
+    topHolders: [],
+
+    burnedPercent: null,
+    ownerHoldingsPercent: null,
+  });
+
+export const extractAddresses =
+  (
+    text: string
+  ): string[] => {
+    const matches =
+      text.match(
+        /0x[a-fA-F0-9]{40}/g
+      ) ?? [];
+
+    const uniqueAddresses =
+      new Set<string>();
+
+    for (
+      const address of matches
+    ) {
+      try {
+        uniqueAddresses.add(
+          ethers.getAddress(
+            address
+          )
+        );
+      } catch {
+        // Ignore invalid addresses.
+      }
+    }
+
+    return Array.from(
+      uniqueAddresses
+    );
+  };
+
+const getBscScanApiKey =
+  (): string | null => {
+    const key =
+      process.env.BSCSCAN_API_KEY;
+
+    return key &&
+      key.trim().length > 0
+      ? key.trim()
+      : null;
+  };
+
+const detectPair =
+  async (
+    address: string
+  ): Promise<{
+    token0: string;
+    token1: string;
+    reserve0: bigint;
+    reserve1: bigint;
+  } | null> => {
     try {
-      uniqueAddresses.add(
-        ethers.getAddress(address)
-      );
+      const pair =
+        new ethers.Contract(
+          address,
+          PAIR_ABI,
+          provider
+        );
+
+      const token0 =
+        ethers.getAddress(
+          await pair.token0()
+        );
+
+      const token1 =
+        ethers.getAddress(
+          await pair.token1()
+        );
+
+      const reserves =
+        await pair.getReserves();
+
+      return {
+        token0,
+        token1,
+        reserve0: reserves[0],
+        reserve1: reserves[1],
+      };
     } catch {
-      // Ignore invalid addresses.
+      return null;
     }
-  }
+  };
 
-  return Array.from(uniqueAddresses);
-};
-
-/**
- * Checks whether an address is a PancakeSwap-style
- * liquidity pair before attempting ERC20 detection.
- *
- * This is important because an LP/pair is also a smart
- * contract and must never be presented as the token CA.
- */
-const detectPair = async (
-  address: string
-): Promise<{
-  token0: string;
-  token1: string;
-  reserve0: bigint;
-  reserve1: bigint;
-} | null> => {
-  try {
-    const pair =
-      new ethers.Contract(
-        address,
-        PAIR_ABI,
-        provider
-      );
-
-    const token0 =
-      ethers.getAddress(
-        await pair.token0()
-      );
-
-    const token1 =
-      ethers.getAddress(
-        await pair.token1()
-      );
-
-    const reserves =
-      await pair.getReserves();
-
-    return {
-      token0,
-      token1,
-      reserve0: reserves[0],
-      reserve1: reserves[1],
-    };
-  } catch {
-    return null;
-  }
-};
-
-const getUnderlyingTokenFromPair = (
-  token0: string,
-  token1: string
-): string => {
-  const token0Lower =
-    token0.toLowerCase();
-
-  if (
-    token0Lower ===
-    WBNB_ADDRESS.toLowerCase()
-  ) {
-    return token1;
-  }
-
-  if (
-    token1.toLowerCase() ===
-    WBNB_ADDRESS.toLowerCase()
-  ) {
-    return token0;
-  }
-
-  // For non-WBNB pairs, use token0 as the
-  // deterministic fallback. DexScreener will
-  // later provide the actual market pair.
-  return token0;
-};
-
-const fetchDexScreenerData = async (
-  tokenAddress: string
-): Promise<MarketData> => {
-  const market =
-    emptyMarketData();
-
-  try {
-    const response =
-      await fetch(
-        `https://api.dexscreener.com/latest/dex/tokens/${tokenAddress}`
-      );
-
-    if (!response.ok) {
-      return market;
-    }
-
-    const data =
-      (await response.json()) as DexScreenerResponse;
-
-    const pairs =
-      Array.isArray(data.pairs)
-        ? data.pairs
-        : [];
-
-    const bscPairs =
-      pairs.filter(
-        (pair) =>
-          pair?.chainId?.toLowerCase() ===
-          "bsc"
-      );
-
-    if (
-      bscPairs.length === 0
-    ) {
-      return market;
-    }
-
-    bscPairs.sort(
-      (a, b) =>
-        Number(
-          b?.liquidity?.usd ?? 0
-        ) -
-        Number(
-          a?.liquidity?.usd ?? 0
-        )
-    );
-
-    const pair =
-      bscPairs[0];
-
-    market.priceUsd =
-      pair?.priceUsd != null
-        ? Number(pair.priceUsd)
-        : null;
-
-    market.priceNative =
-      pair?.priceNative != null
-        ? Number(pair.priceNative)
-        : null;
-
-    market.marketCap =
-      pair?.marketCap != null
-        ? Number(pair.marketCap)
-        : pair?.fdv != null
-          ? Number(pair.fdv)
-          : null;
-
-    market.liquidityUsd =
-      pair?.liquidity?.usd != null
-        ? Number(
-            pair.liquidity.usd
-          )
-        : null;
-
-    market.volume24h =
-      pair?.volume?.h24 != null
-        ? Number(
-            pair.volume.h24
-          )
-        : null;
-
-    market.buys24h =
-      pair?.txns?.h24?.buys != null
-        ? Number(
-            pair.txns.h24.buys
-          )
-        : null;
-
-    market.sells24h =
-      pair?.txns?.h24?.sells != null
-        ? Number(
-            pair.txns.h24.sells
-          )
-        : null;
-
-    market.pairAddress =
-      pair?.pairAddress ?? null;
-
-    market.dex =
-      pair?.dexId ?? null;
-
-    market.pairLabel =
-      pair?.baseToken?.symbol &&
-      pair?.quoteToken?.symbol
-        ? `${pair.baseToken.symbol}/${pair.quoteToken.symbol}`
-        : null;
-
-    market.pairCreatedAt =
-      pair?.pairCreatedAt != null
-        ? Number(
-            pair.pairCreatedAt
-          )
-        : null;
-
-    const websites =
-      pair?.info?.websites ?? [];
-
-    for (
-      const website of websites
-    ) {
-      if (
-        website?.url &&
-        !market.website
-      ) {
-        market.website =
-          website.url;
-      }
-    }
-
-    const socials =
-      pair?.info?.socials ?? [];
-
-    for (
-      const social of socials
-    ) {
-      if (!social?.url) {
-        continue;
-      }
-
-      const type =
-        String(
-          social.type ?? ""
-        ).toLowerCase();
-
-      if (
-        type.includes("telegram") &&
-        !market.telegram
-      ) {
-        market.telegram =
-          social.url;
-      }
-
-      if (
-        (type === "twitter" ||
-          type === "x") &&
-        !market.twitter
-      ) {
-        market.twitter =
-          social.url;
-      }
-    }
-
-    if (
-      market.marketCap !== null &&
-      market.marketCap > 0 &&
-      market.liquidityUsd !== null
-    ) {
-      market.lpRatio =
-        (market.liquidityUsd /
-          market.marketCap) *
-        100;
-    }
-
-    if (
-      market.pairAddress
-    ) {
-      await enrichPairData(
-        market,
-        market.pairAddress
-      );
-    }
-  } catch (error) {
-    console.error(
-      "DexScreener request failed:",
-      error
-    );
-  }
-
-  return market;
-};
-
-const enrichPairData = async (
-  market: MarketData,
-  pairAddress: string
-): Promise<void> => {
-  try {
-    if (
-      !ethers.isAddress(
-        pairAddress
-      )
-    ) {
-      return;
-    }
-
-    const pair =
-      new ethers.Contract(
-        pairAddress,
-        PAIR_ABI,
-        provider
-      );
-
-    const token0 =
-      ethers.getAddress(
-        await pair.token0()
-      );
-
-    const token1 =
-      ethers.getAddress(
-        await pair.token1()
-      );
-
-    const reserves =
-      await pair.getReserves();
-
-    let wbnbReserve =
-      0;
-
+const getUnderlyingTokenFromPair =
+  (
+    token0: string,
+    token1: string
+  ): string => {
     if (
       token0.toLowerCase() ===
       WBNB_ADDRESS.toLowerCase()
     ) {
-      wbnbReserve =
-        Number(
-          ethers.formatEther(
-            reserves[0]
-          )
-        );
+      return token1;
     }
 
     if (
       token1.toLowerCase() ===
       WBNB_ADDRESS.toLowerCase()
     ) {
-      wbnbReserve =
-        Number(
-          ethers.formatEther(
-            reserves[1]
-          )
+      return token0;
+    }
+
+    return token0;
+  };
+
+const fetchDexScreenerData =
+  async (
+    tokenAddress: string,
+    totalSupply?: string,
+    decimals?: number
+  ): Promise<MarketData> => {
+    const market =
+      emptyMarketData();
+
+    try {
+      const response =
+        await fetch(
+          `https://api.dexscreener.com/latest/dex/tokens/${tokenAddress}`
         );
-    }
 
-    if (
-      wbnbReserve > 0
-    ) {
-      market.lpBnb =
-        wbnbReserve;
-    }
-  } catch {
-    // Pair enrichment is supplementary.
-  }
-};
+      if (!response.ok) {
+        return market;
+      }
 
-const analyzeLP = async (
-  market: MarketData
-): Promise<LPData> => {
-  const result =
-    emptyLPData();
+      const data =
+        (await response.json()) as DexScreenerResponse;
 
-  if (
-    !market.pairAddress
-  ) {
-    return result;
-  }
+      const pairs =
+        Array.isArray(data.pairs)
+          ? data.pairs
+          : [];
 
-  try {
-    const pair =
-      new ethers.Contract(
-        market.pairAddress,
-        PAIR_ABI,
-        provider
+      const bscPairs =
+        pairs.filter(
+          (pair) =>
+            pair?.chainId?.toLowerCase() ===
+            "bsc"
+        );
+
+      if (
+        bscPairs.length === 0
+      ) {
+        return market;
+      }
+
+      bscPairs.sort(
+        (a, b) =>
+          Number(
+            b?.liquidity?.usd ?? 0
+          ) -
+          Number(
+            a?.liquidity?.usd ?? 0
+          )
       );
 
-    const lpSupply =
-      await pair.totalSupply();
+      const pair =
+        bscPairs[0];
 
-    if (
-      lpSupply === 0n
-    ) {
-      return result;
-    }
+      market.priceUsd =
+        pair?.priceUsd != null
+          ? Number(pair.priceUsd)
+          : null;
 
-    let burnedBalance =
-      0n;
+      market.priceNative =
+        pair?.priceNative != null
+          ? Number(pair.priceNative)
+          : null;
 
-    for (
-      const deadAddress of
-        DEAD_ADDRESSES
-    ) {
-      try {
-        burnedBalance +=
-          await pair.balanceOf(
-            deadAddress
-          );
-      } catch {
-        // Ignore individual dead-address failures.
-      }
-    }
+      /*
+       * Prefer actual market cap.
+       *
+       * If DexScreener doesn't provide it,
+       * calculate it from price × total supply.
+       *
+       * Do NOT silently use FDV as market cap.
+       */
 
-    if (
-      burnedBalance > 0n
-    ) {
-      const burnPercent =
-        Number(
-          ethers.formatUnits(
-            (burnedBalance *
-              10000n) /
-              lpSupply,
-            2
+      if (
+        pair?.marketCap != null &&
+        Number.isFinite(
+          Number(pair.marketCap)
+        )
+      ) {
+        market.marketCap =
+          Number(pair.marketCap);
+      } else if (
+        market.priceUsd !== null &&
+        totalSupply &&
+        decimals !== undefined
+      ) {
+        const supply =
+          Number(totalSupply);
+
+        if (
+          Number.isFinite(
+            supply
           )
+        ) {
+          market.marketCap =
+            market.priceUsd *
+            supply;
+        }
+      }
+
+      market.liquidityUsd =
+        pair?.liquidity?.usd != null
+          ? Number(
+              pair.liquidity.usd
+            )
+          : null;
+
+      market.volume24h =
+        pair?.volume?.h24 != null
+          ? Number(
+              pair.volume.h24
+            )
+          : null;
+
+      market.buys24h =
+        pair?.txns?.h24?.buys != null
+          ? Number(
+              pair.txns.h24.buys
+            )
+          : null;
+
+      market.sells24h =
+        pair?.txns?.h24?.sells != null
+          ? Number(
+              pair.txns.h24.sells
+            )
+          : null;
+
+      market.pairAddress =
+        pair?.pairAddress ?? null;
+
+      market.dex =
+        pair?.dexId ?? null;
+
+      market.pairLabel =
+        pair?.baseToken?.symbol &&
+        pair?.quoteToken?.symbol
+          ? `${pair.baseToken.symbol}/${pair.quoteToken.symbol}`
+          : null;
+
+      market.pairCreatedAt =
+        pair?.pairCreatedAt != null
+          ? Number(
+              pair.pairCreatedAt
+            )
+          : null;
+
+      const websites =
+        pair?.info?.websites ?? [];
+
+      for (
+        const website of websites
+      ) {
+        if (
+          website?.url &&
+          !market.website
+        ) {
+          market.website =
+            website.url;
+        }
+      }
+
+      const socials =
+        pair?.info?.socials ?? [];
+
+      for (
+        const social of socials
+      ) {
+        if (!social?.url) {
+          continue;
+        }
+
+        const type =
+          String(
+            social.type ?? ""
+          ).toLowerCase();
+
+        if (
+          type.includes(
+            "telegram"
+          ) &&
+          !market.telegram
+        ) {
+          market.telegram =
+            social.url;
+        }
+
+        if (
+          (
+            type.includes(
+              "twitter"
+            ) ||
+            type === "x"
+          ) &&
+          !market.twitter
+        ) {
+          market.twitter =
+            social.url;
+        }
+
+        if (
+          type.includes(
+            "discord"
+          ) &&
+          !market.discord
+        ) {
+          market.discord =
+            social.url;
+        }
+
+        if (
+          type.includes(
+            "github"
+          ) &&
+          !market.github
+        ) {
+          market.github =
+            social.url;
+        }
+
+        if (
+          type.includes(
+            "youtube"
+          ) &&
+          !market.youtube
+        ) {
+          market.youtube =
+            social.url;
+        }
+
+        if (
+          type.includes(
+            "instagram"
+          ) &&
+          !market.instagram
+        ) {
+          market.instagram =
+            social.url;
+        }
+
+        if (
+          type.includes(
+            "facebook"
+          ) &&
+          !market.facebook
+        ) {
+          market.facebook =
+            social.url;
+        }
+
+        if (
+          type.includes(
+            "tiktok"
+          ) &&
+          !market.tiktok
+        ) {
+          market.tiktok =
+            social.url;
+        }
+      }
+
+      if (
+        market.marketCap !== null &&
+        market.marketCap > 0 &&
+        market.liquidityUsd !== null
+      ) {
+        market.lpRatio =
+          (
+            market.liquidityUsd /
+            market.marketCap
+          ) * 100;
+      }
+
+      if (
+        market.pairAddress
+      ) {
+        await enrichPairData(
+          market,
+          market.pairAddress,
+          tokenAddress,
+          decimals,
+          totalSupply
+        );
+      }
+    } catch (error) {
+      console.error(
+        "DexScreener request failed:",
+        error
+      );
+    }
+
+    return market;
+  };
+
+const enrichPairData =
+  async (
+    market: MarketData,
+    pairAddress: string,
+    tokenAddress: string,
+    decimals?: number,
+    totalSupply?: string
+  ): Promise<void> => {
+    try {
+      if (
+        !ethers.isAddress(
+          pairAddress
+        )
+      ) {
+        return;
+      }
+
+      const pair =
+        new ethers.Contract(
+          pairAddress,
+          PAIR_ABI,
+          provider
         );
 
-      result.lpBurnPercent =
-        burnPercent;
+      const token0 =
+        ethers.getAddress(
+          await pair.token0()
+        );
+
+      const token1 =
+        ethers.getAddress(
+          await pair.token1()
+        );
+
+      const reserves =
+        await pair.getReserves();
+
+      let wbnbReserve =
+        0;
+
+      let tokenReserve =
+        0n;
 
       if (
-        burnPercent >= 99
+        token0.toLowerCase() ===
+        WBNB_ADDRESS.toLowerCase()
       ) {
-        result.status =
-          "BURNED";
+        wbnbReserve =
+          Number(
+            ethers.formatEther(
+              reserves[0]
+            )
+          );
 
-        result.lpBurned =
-          true;
-
-        return result;
+        if (
+          token1.toLowerCase() ===
+          tokenAddress.toLowerCase()
+        ) {
+          tokenReserve =
+            reserves[1];
+        }
       }
+
+      if (
+        token1.toLowerCase() ===
+        WBNB_ADDRESS.toLowerCase()
+      ) {
+        wbnbReserve =
+          Number(
+            ethers.formatEther(
+              reserves[1]
+            )
+          );
+
+        if (
+          token0.toLowerCase() ===
+          tokenAddress.toLowerCase()
+        ) {
+          tokenReserve =
+            reserves[0];
+        }
+      }
+
+      if (
+        wbnbReserve > 0
+      ) {
+        market.lpBnb =
+          wbnbReserve;
+      }
+
+      if (
+        tokenReserve > 0n &&
+        decimals !== undefined
+      ) {
+        market.tokenReserve =
+          Number(
+            ethers.formatUnits(
+              tokenReserve,
+              decimals
+            )
+          );
+
+        if (
+          totalSupply
+        ) {
+          const supply =
+            Number(
+              totalSupply
+            );
+
+          if (
+            Number.isFinite(
+              supply
+            ) &&
+            supply > 0
+          ) {
+            market.tokenInPoolPercent =
+              (
+                market.tokenReserve /
+                supply
+              ) * 100;
+          }
+        }
+      }
+    } catch {
+      // Pair enrichment is supplementary.
     }
-  } catch {
-    // Leave LP status UNKNOWN.
-  }
+  };
 
-  return result;
-};
+const getContractSource =
+  async (
+    address: string
+  ): Promise<{
+    verified: boolean;
+    sourceCode: string | null;
+    contractName: string | null;
+  }> => {
+    const result = {
+      verified: false,
+      sourceCode: null as string | null,
+      contractName: null as string | null,
+    };
 
-const analyzeHolders = async (
-  tokenAddress: string,
-  totalSupply: string,
-  decimals: number
-): Promise<HolderData> => {
-  const result =
-    emptyHolderData();
+    const apiKey =
+      getBscScanApiKey();
 
-  const apiKey =
-    process.env.BSCSCAN_API_KEY;
-
-  if (!apiKey) {
-    return result;
-  }
-
-  try {
-    const url =
-      "https://api.bscscan.com/api" +
-      `?module=token` +
-      `&action=tokenholdercount` +
-      `&contractaddress=${tokenAddress}` +
-      `&apikey=${apiKey}`;
-
-    const response =
-      await fetch(url);
-
-    if (!response.ok) {
+    if (!apiKey) {
       return result;
     }
 
-    const data =
-      (await response.json()) as BscScanResponse;
+    try {
+      const url =
+        `https://api.bscscan.com/api` +
+        `?module=contract` +
+        `&action=getsourcecode` +
+        `&address=${address}` +
+        `&apikey=${apiKey}`;
 
-    if (
-      data?.status === "1" &&
-      typeof data?.result ===
-        "string"
-    ) {
-      const holders =
-        Number(data.result);
+      const response =
+        await fetch(url);
+
+      if (!response.ok) {
+        return result;
+      }
+
+      const data =
+        (await response.json()) as BscScanResponse;
 
       if (
-        Number.isFinite(holders)
+        !Array.isArray(
+          data.result
+        ) ||
+        data.result.length === 0
       ) {
-        result.holders =
-          holders;
+        return result;
+      }
+
+      const item =
+        data.result[0] as BscScanSource;
+
+      const source =
+        item?.SourceCode ?? "";
+
+      if (
+        source.trim().length > 0
+      ) {
+        result.verified =
+          true;
+
+        result.sourceCode =
+          source;
+
+        result.contractName =
+          item.ContractName ??
+          null;
+      }
+    } catch (error) {
+      console.error(
+        "Source verification request failed:",
+        error
+      );
+    }
+
+    return result;
+  };
+
+const extractSocialLinks =
+  (
+    sourceCode: string | null
+  ): SocialLinks => {
+    const result =
+      emptySocialLinks();
+
+    if (
+      !sourceCode
+    ) {
+      return result;
+    }
+
+    const urls =
+      sourceCode.match(
+        /https?:\/\/[^\s"'<>\\)]+/gi
+      ) ?? [];
+
+    for (
+      const rawUrl of urls
+    ) {
+      const url =
+        rawUrl.replace(
+          /[),.;]+$/,
+          ""
+        );
+
+      const lower =
+        url.toLowerCase();
+
+      if (
+        (
+          lower.includes(
+            "twitter.com"
+          ) ||
+          lower.includes(
+            "x.com"
+          )
+        ) &&
+        !result.twitter
+      ) {
+        result.twitter =
+          url;
+      } else if (
+        lower.includes(
+          "t.me"
+        ) ||
+        lower.includes(
+          "telegram.me"
+        ) ||
+        lower.includes(
+          "telegram."
+        )
+      ) {
+        if (
+          !result.telegram
+        ) {
+          result.telegram =
+            url;
+        }
+      } else if (
+        lower.includes(
+          "discord"
+        ) &&
+        !result.discord
+      ) {
+        result.discord =
+          url;
+      } else if (
+        lower.includes(
+          "github.com"
+        ) &&
+        !result.github
+      ) {
+        result.github =
+          url;
+      } else if (
+        lower.includes(
+          "youtube.com"
+        ) ||
+        lower.includes(
+          "youtu.be"
+        )
+      ) {
+        if (
+          !result.youtube
+        ) {
+          result.youtube =
+            url;
+        }
+      } else if (
+        lower.includes(
+          "instagram.com"
+        ) &&
+        !result.instagram
+      ) {
+        result.instagram =
+          url;
+      } else if (
+        lower.includes(
+          "facebook.com"
+        ) &&
+        !result.facebook
+      ) {
+        result.facebook =
+          url;
+      } else if (
+        lower.includes(
+          "tiktok.com"
+        ) &&
+        !result.tiktok
+      ) {
+        result.tiktok =
+          url;
+      } else if (
+        !result.website &&
+        !lower.includes(
+          "bscscan.com"
+        ) &&
+        !lower.includes(
+          "etherscan.io"
+        )
+      ) {
+        result.website =
+          url;
       }
     }
-  } catch (error) {
-    console.error(
-      "Holder API request failed:",
-      error
-    );
-  }
 
-  void totalSupply;
-  void decimals;
+    return result;
+  };
 
-  return result;
-};
+const mergeSocialLinks =
+  (
+    primary: SocialLinks,
+    secondary: SocialLinks
+  ): SocialLinks => ({
+    website:
+      primary.website ??
+      secondary.website,
 
-const readToken = async (
-  address: string
-): Promise<{
-  name?: string;
-  symbol?: string;
-  decimals?: number;
-  totalSupply?: string;
-  hasTokenData: boolean;
-}> => {
-  const token =
-    new ethers.Contract(
-      address,
-      ERC20_ABI,
-      provider
-    );
+    telegram:
+      primary.telegram ??
+      secondary.telegram,
 
-  let hasTokenData =
-    false;
+    twitter:
+      primary.twitter ??
+      secondary.twitter,
 
-  const result: {
+    discord:
+      primary.discord ??
+      secondary.discord,
+
+    github:
+      primary.github ??
+      secondary.github,
+
+    youtube:
+      primary.youtube ??
+      secondary.youtube,
+
+    instagram:
+      primary.instagram ??
+      secondary.instagram,
+
+    facebook:
+      primary.facebook ??
+      secondary.facebook,
+
+    tiktok:
+      primary.tiktok ??
+      secondary.tiktok,
+  });
+
+const getUnlockTime =
+  async (
+    address: string
+  ): Promise<number | null> => {
+    try {
+      const locker =
+        new ethers.Contract(
+          address,
+          LOCKER_ABI,
+          provider
+        );
+
+      const methods = [
+        "unlockTime",
+        "lockEndTime",
+        "endTime",
+        "getUnlockTime",
+        "lockedUntil",
+      ];
+
+      for (
+        const method of methods
+      ) {
+        try {
+          const value =
+            await locker[method]();
+
+          const timestamp =
+            Number(value);
+
+          if (
+            Number.isFinite(
+              timestamp
+            ) &&
+            timestamp > 0
+          ) {
+            return timestamp;
+          }
+        } catch {
+          // Try next common locker method.
+        }
+      }
+    } catch {
+      // Not a readable locker.
+    }
+
+    return null;
+  };
+
+const getBscScanHolders =
+  async (
+    tokenAddress: string,
+    page = 1,
+    offset = 20
+  ): Promise<BscScanHolder[]> => {
+    const apiKey =
+      getBscScanApiKey();
+
+    if (!apiKey) {
+      return [];
+    }
+
+    try {
+      const url =
+        `https://api.bscscan.com/api` +
+        `?module=token` +
+        `&action=tokenholderlist` +
+        `&contractaddress=${tokenAddress}` +
+        `&page=${page}` +
+        `&offset=${offset}` +
+        `&apikey=${apiKey}`;
+
+      const response =
+        await fetch(url);
+
+      if (!response.ok) {
+        return [];
+      }
+
+      const data =
+        (await response.json()) as BscScanResponse;
+
+      if (
+        !Array.isArray(
+          data.result
+        )
+      ) {
+        return [];
+      }
+
+      return data.result as BscScanHolder[];
+    } catch (error) {
+      console.error(
+        "Holder list request failed:",
+        error
+      );
+
+      return [];
+    }
+  };
+
+const analyzeLP =
+  async (
+    market: MarketData
+  ): Promise<LPData> => {
+    const result =
+      emptyLPData();
+
+    if (
+      !market.pairAddress
+    ) {
+      return result;
+    }
+
+    try {
+      const pair =
+        new ethers.Contract(
+          market.pairAddress,
+          PAIR_ABI,
+          provider
+        );
+
+      const lpSupply =
+        await pair.totalSupply();
+
+      result.lpTotalSupply =
+        lpSupply.toString();
+
+      if (
+        lpSupply === 0n
+      ) {
+        return result;
+      }
+
+      let burnedBalance =
+        0n;
+
+      for (
+        const deadAddress of
+          DEAD_ADDRESSES
+      ) {
+        try {
+          burnedBalance +=
+            await pair.balanceOf(
+              deadAddress
+            );
+        } catch {
+          // Ignore.
+        }
+      }
+
+      if (
+        burnedBalance > 0n
+      ) {
+        const burnPercent =
+          Number(
+            ethers.formatUnits(
+              (
+                burnedBalance *
+                10000n
+              ) /
+                lpSupply,
+              2
+            )
+          );
+
+        result.lpBurnPercent =
+          burnPercent;
+
+        if (
+          burnPercent >= 99
+        ) {
+          result.status =
+            "BURNED";
+
+          result.lpBurned =
+            true;
+
+          result.lpAmount =
+            Number(
+              ethers.formatEther(
+                burnedBalance
+              )
+            );
+
+          return result;
+        }
+      }
+
+      const holders =
+        await getBscScanHolders(
+          market.pairAddress,
+          1,
+          20
+        );
+
+      for (
+        const holder of holders
+      ) {
+        const holderAddress =
+          holder.TokenHolderAddress ??
+          holder.address;
+
+        const quantity =
+          holder.TokenHolderQuantity ??
+          holder.quantity;
+
+        if (
+          !holderAddress ||
+          !quantity ||
+          !ethers.isAddress(
+            holderAddress
+          )
+        ) {
+          continue;
+        }
+
+        const normalizedHolder =
+          ethers.getAddress(
+            holderAddress
+          );
+
+        if (
+          DEAD_ADDRESSES.includes(
+            normalizedHolder.toLowerCase()
+          )
+        ) {
+          continue;
+        }
+
+        const balance =
+          BigInt(quantity);
+
+        if (
+          balance === 0n
+        ) {
+          continue;
+        }
+
+        const code =
+          await provider.getCode(
+            normalizedHolder
+          );
+
+        if (
+          code === "0x"
+        ) {
+          continue;
+        }
+
+        const unlockTime =
+          await getUnlockTime(
+            normalizedHolder
+          );
+
+        if (
+          unlockTime !== null
+        ) {
+          const now =
+            Math.floor(
+              Date.now() / 1000
+            );
+
+          const lockedDate =
+            new Date(
+              unlockTime * 1000
+            );
+
+          result.lockedUntil =
+            lockedDate.toISOString();
+
+          result.durationDays =
+            Math.max(
+              0,
+              Math.round(
+                (
+                  unlockTime -
+                  now
+                ) /
+                  86400
+              )
+            );
+
+          result.remainingDays =
+            result.durationDays;
+
+          if (
+            unlockTime > now
+          ) {
+            result.status =
+              "LOCKED";
+          } else {
+            result.status =
+              "EXPIRED";
+          }
+
+          result.lockProvider =
+            normalizedHolder;
+
+          result.lpAmount =
+            Number(
+              ethers.formatEther(
+                balance
+              )
+            );
+
+          return result;
+        }
+      }
+    } catch {
+      // Leave LP status UNKNOWN.
+    }
+
+    return result;
+  };
+
+const analyzeHolders =
+  async (
+    tokenAddress: string,
+    totalSupply: string,
+    decimals: number,
+    ownerAddress?: string | null,
+    pairAddress?: string | null
+  ): Promise<HolderData> => {
+    const result =
+      emptyHolderData();
+
+    const apiKey =
+      getBscScanApiKey();
+
+    if (!apiKey) {
+      return result;
+    }
+
+    try {
+      const countUrl =
+        `https://api.bscscan.com/api` +
+        `?module=token` +
+        `&action=tokenholdercount` +
+        `&contractaddress=${tokenAddress}` +
+        `&apikey=${apiKey}`;
+
+      const countResponse =
+        await fetch(
+          countUrl
+        );
+
+      if (
+        countResponse.ok
+      ) {
+        const countData =
+          (await countResponse.json()) as BscScanResponse;
+
+        if (
+          countData?.status ===
+            "1" &&
+          typeof countData.result ===
+            "string"
+        ) {
+          const holders =
+            Number(
+              countData.result
+            );
+
+          if (
+            Number.isFinite(
+              holders
+            )
+          ) {
+            result.holders =
+              holders;
+          }
+        }
+      }
+
+      const holderList =
+        await getBscScanHolders(
+          tokenAddress,
+          1,
+          20
+        );
+
+      const supply =
+        Number(
+          totalSupply
+        );
+
+      if (
+        !Number.isFinite(
+          supply
+        ) ||
+        supply <= 0
+      ) {
+        return result;
+      }
+
+      const excluded =
+        new Set(
+          DEAD_ADDRESSES
+        );
+
+      if (
+        pairAddress &&
+        ethers.isAddress(
+          pairAddress
+        )
+      ) {
+        excluded.add(
+          pairAddress.toLowerCase()
+        );
+      }
+
+      const topHolders:
+        TopHolder[] = [];
+
+      let runningPercent =
+        0;
+
+      for (
+        const holder of
+          holderList
+      ) {
+        const holderAddress =
+          holder.TokenHolderAddress ??
+          holder.address;
+
+        const quantity =
+          holder.TokenHolderQuantity ??
+          holder.quantity;
+
+        if (
+          !holderAddress ||
+          !quantity ||
+          !ethers.isAddress(
+            holderAddress
+          )
+        ) {
+          continue;
+        }
+
+        const normalized =
+          ethers.getAddress(
+            holderAddress
+          );
+
+        if (
+          excluded.has(
+            normalized.toLowerCase()
+          )
+        ) {
+          continue;
+        }
+
+        const rawBalance =
+          Number(
+            quantity
+          );
+
+        const balance =
+          rawBalance /
+          10 ** decimals;
+
+        if (
+          !Number.isFinite(
+            balance
+          )
+        ) {
+          continue;
+        }
+
+        const percent =
+          (
+            balance /
+            supply
+          ) * 100;
+
+        if (
+          !Number.isFinite(
+            percent
+          )
+        ) {
+          continue;
+        }
+
+        topHolders.push({
+          address:
+            normalized,
+          percent,
+        });
+
+        runningPercent +=
+          percent;
+
+        if (
+          topHolders.length >=
+          20
+        ) {
+          break;
+        }
+      }
+
+      result.topHolders =
+        topHolders;
+
+      result.top1 =
+        topHolders[0]?.percent ??
+        null;
+
+      result.top5 =
+        topHolders
+          .slice(0, 5)
+          .reduce(
+            (sum, holder) =>
+              sum +
+              holder.percent,
+            0
+          );
+
+      result.top10 =
+        topHolders
+          .slice(0, 10)
+          .reduce(
+            (sum, holder) =>
+              sum +
+              holder.percent,
+            0
+          );
+
+      result.top20 =
+        runningPercent;
+
+      let burned =
+        0;
+
+      for (
+        const holder of
+          holderList
+      ) {
+        const holderAddress =
+          holder.TokenHolderAddress ??
+          holder.address;
+
+        const quantity =
+          holder.TokenHolderQuantity ??
+          holder.quantity;
+
+        if (
+          !holderAddress ||
+          !quantity ||
+          !ethers.isAddress(
+            holderAddress
+          )
+        ) {
+          continue;
+        }
+
+        if (
+          DEAD_ADDRESSES.includes(
+            holderAddress.toLowerCase()
+          )
+        ) {
+          const balance =
+            Number(
+              quantity
+            ) /
+            10 ** decimals;
+
+          if (
+            Number.isFinite(
+              balance
+            )
+          ) {
+            burned +=
+              balance;
+          }
+        }
+      }
+
+      if (
+        burned > 0
+      ) {
+        result.burnedPercent =
+          (
+            burned /
+            supply
+          ) * 100;
+      }
+
+      if (
+        ownerAddress &&
+        ethers.isAddress(
+          ownerAddress
+        )
+      ) {
+        for (
+          const holder of
+            holderList
+        ) {
+          const holderAddress =
+            holder.TokenHolderAddress ??
+            holder.address;
+
+          const quantity =
+            holder.TokenHolderQuantity ??
+            holder.quantity;
+
+          if (
+            holderAddress &&
+            quantity &&
+            holderAddress.toLowerCase() ===
+              ownerAddress.toLowerCase()
+          ) {
+            const balance =
+              Number(
+                quantity
+              ) /
+              10 ** decimals;
+
+            if (
+              Number.isFinite(
+                balance
+              )
+            ) {
+              result.ownerHoldingsPercent =
+                (
+                  balance /
+                  supply
+                ) * 100;
+            }
+
+            break;
+          }
+        }
+      }
+    } catch (error) {
+      console.error(
+        "Holder analysis failed:",
+        error
+      );
+    }
+
+    return result;
+  };
+
+const readToken =
+  async (
+    address: string
+  ): Promise<{
     name?: string;
     symbol?: string;
     decimals?: number;
     totalSupply?: string;
     hasTokenData: boolean;
-  } = {
-    hasTokenData: false,
-  };
-
-  try {
-    result.name =
-      await token.name();
-
-    hasTokenData =
-      true;
-  } catch {
-    // Not an ERC20 name implementation.
-  }
-
-  try {
-    result.symbol =
-      await token.symbol();
-
-    hasTokenData =
-      true;
-  } catch {
-    // Not an ERC20 symbol implementation.
-  }
-
-  try {
-    result.decimals =
-      Number(
-        await token.decimals()
+  }> => {
+    const token =
+      new ethers.Contract(
+        address,
+        ERC20_ABI,
+        provider
       );
 
-    hasTokenData =
-      true;
-  } catch {
-    // Decimals unavailable.
-  }
+    let hasTokenData =
+      false;
 
-  try {
-    const supply =
-      await token.totalSupply();
+    const result: {
+      name?: string;
+      symbol?: string;
+      decimals?: number;
+      totalSupply?: string;
+      hasTokenData: boolean;
+    } = {
+      hasTokenData: false,
+    };
 
-    if (
-      result.decimals !==
-      undefined
-    ) {
-      result.totalSupply =
-        ethers.formatUnits(
-          supply,
-          result.decimals
-        );
-    } else {
-      result.totalSupply =
-        supply.toString();
+    try {
+      result.name =
+        await token.name();
+
+      hasTokenData =
+        true;
+    } catch {
+      // Ignore.
     }
 
-    hasTokenData =
-      true;
-  } catch {
-    // Total supply unavailable.
-  }
+    try {
+      result.symbol =
+        await token.symbol();
 
-  result.hasTokenData =
-    hasTokenData;
+      hasTokenData =
+        true;
+    } catch {
+      // Ignore.
+    }
 
-  return result;
-};
+    try {
+      result.decimals =
+        Number(
+          await token.decimals()
+        );
 
-export const scanContract = async (
-  address: string
-): Promise<ScanResult> => {
-  if (
-    !ethers.isAddress(address)
-  ) {
-    throw new Error(
-      "Invalid contract address."
-    );
-  }
+      hasTokenData =
+        true;
+    } catch {
+      // Ignore.
+    }
 
-  const normalizedAddress =
-    ethers.getAddress(address);
+    try {
+      const supply =
+        await token.totalSupply();
 
-  const code =
-    await provider.getCode(
-      normalizedAddress
-    );
+      if (
+        result.decimals !==
+        undefined
+      ) {
+        result.totalSupply =
+          ethers.formatUnits(
+            supply,
+            result.decimals
+          );
+      } else {
+        result.totalSupply =
+          supply.toString();
+      }
 
-  if (
-    code === "0x"
-  ) {
-    return {
-      address:
-        normalizedAddress,
-      isContract: false,
-      type: "unknown",
-    };
-  }
+      hasTokenData =
+        true;
+    } catch {
+      // Ignore.
+    }
 
-  /**
-   * IMPORTANT:
-   *
-   * Detect LP/pair contracts BEFORE ERC20 detection.
-   *
-   * A liquidity pair is a smart contract and may expose
-   * functions that can confuse generic token detection.
-   */
-  const pairData =
-    await detectPair(
-      normalizedAddress
-    );
+    result.hasTokenData =
+      hasTokenData;
 
-  if (pairData) {
-    const tokenAddress =
-      getUnderlyingTokenFromPair(
-        pairData.token0,
-        pairData.token1
+    return result;
+  };
+
+export const scanContract =
+  async (
+    address: string
+  ): Promise<ScanResult> => {
+    if (
+      !ethers.isAddress(address)
+    ) {
+      throw new Error(
+        "Invalid contract address."
       );
+    }
+
+    const normalizedAddress =
+      ethers.getAddress(
+        address
+      );
+
+    const code =
+      await provider.getCode(
+        normalizedAddress
+      );
+
+    if (
+      code === "0x"
+    ) {
+      return {
+        address:
+          normalizedAddress,
+        isContract: false,
+        type: "unknown",
+      };
+    }
+
+    /*
+     * Detect pair first.
+     */
+
+    const pairData =
+      await detectPair(
+        normalizedAddress
+      );
+
+    if (
+      pairData
+    ) {
+      const tokenAddress =
+        getUnderlyingTokenFromPair(
+          pairData.token0,
+          pairData.token1
+        );
+
+      const tokenData =
+        await readToken(
+          tokenAddress
+        );
+
+      if (
+        tokenData.hasTokenData
+      ) {
+        const security =
+          await analyzeSecurity(
+            tokenAddress
+          );
+
+        const market =
+          await fetchDexScreenerData(
+            tokenAddress,
+            tokenData.totalSupply,
+            tokenData.decimals
+          );
+
+        const liquidity =
+          await analyzeLP(
+            market
+          );
+
+        const holders =
+          tokenData.totalSupply &&
+          tokenData.decimals !==
+            undefined
+            ? await analyzeHolders(
+                tokenAddress,
+                tokenData.totalSupply,
+                tokenData.decimals,
+                security.owner,
+                market.pairAddress
+              )
+            : emptyHolderData();
+
+        const source =
+          await getContractSource(
+            tokenAddress
+          );
+
+        const sourceSocials =
+          extractSocialLinks(
+            source.sourceCode
+          );
+
+        const marketSocials: SocialLinks = {
+          website:
+            market.website,
+          telegram:
+            market.telegram,
+          twitter:
+            market.twitter,
+          discord:
+            market.discord,
+          github:
+            market.github,
+          youtube:
+            market.youtube,
+          instagram:
+            market.instagram,
+          facebook:
+            market.facebook,
+          tiktok:
+            market.tiktok,
+        };
+
+        const socials =
+          mergeSocialLinks(
+            marketSocials,
+            sourceSocials
+          );
+
+        return {
+          address:
+            tokenAddress,
+
+          isContract: true,
+
+          type: "token",
+
+          name:
+            tokenData.name,
+
+          symbol:
+            tokenData.symbol,
+
+          decimals:
+            tokenData.decimals,
+
+          totalSupply:
+            tokenData.totalSupply,
+
+          token0:
+            pairData.token0,
+
+          token1:
+            pairData.token1,
+
+          reserve0:
+            pairData.reserve0.toString(),
+
+          reserve1:
+            pairData.reserve1.toString(),
+
+          security,
+
+          market:
+            market.pairAddress
+              ? market
+              : {
+                  ...market,
+                  pairAddress:
+                    normalizedAddress,
+                },
+
+          liquidity,
+
+          holders,
+
+          socials,
+
+          sourceVerified:
+            source.verified,
+
+          launchTime:
+            market.pairCreatedAt,
+        };
+      }
+
+      return {
+        address:
+          normalizedAddress,
+
+        isContract: true,
+
+        type: "pair",
+
+        token0:
+          pairData.token0,
+
+        token1:
+          pairData.token1,
+
+        reserve0:
+          pairData.reserve0.toString(),
+
+        reserve1:
+          pairData.reserve1.toString(),
+      };
+    }
+
+    /*
+     * Normal token contract.
+     */
 
     const tokenData =
       await readToken(
-        tokenAddress
+        normalizedAddress
       );
 
     if (
       tokenData.hasTokenData
     ) {
-      const tokenSecurity =
+      const security =
         await analyzeSecurity(
-          tokenAddress
+          normalizedAddress
         );
 
       const market =
         await fetchDexScreenerData(
-          tokenAddress
+          normalizedAddress,
+          tokenData.totalSupply,
+          tokenData.decimals
         );
 
       const liquidity =
@@ -896,15 +2074,54 @@ export const scanContract = async (
         tokenData.decimals !==
           undefined
           ? await analyzeHolders(
-              tokenAddress,
+              normalizedAddress,
               tokenData.totalSupply,
-              tokenData.decimals
+              tokenData.decimals,
+              security.owner,
+              market.pairAddress
             )
           : emptyHolderData();
 
+      const source =
+        await getContractSource(
+          normalizedAddress
+        );
+
+      const sourceSocials =
+        extractSocialLinks(
+          source.sourceCode
+        );
+
+      const marketSocials: SocialLinks = {
+        website:
+          market.website,
+        telegram:
+          market.telegram,
+        twitter:
+          market.twitter,
+        discord:
+          market.discord,
+        github:
+          market.github,
+        youtube:
+          market.youtube,
+        instagram:
+          market.instagram,
+        facebook:
+          market.facebook,
+        tiktok:
+          market.tiktok,
+      };
+
+      const socials =
+        mergeSocialLinks(
+          marketSocials,
+          sourceSocials
+        );
+
       return {
         address:
-          tokenAddress,
+          normalizedAddress,
 
         isContract: true,
 
@@ -922,33 +2139,21 @@ export const scanContract = async (
         totalSupply:
           tokenData.totalSupply,
 
-        token0:
-          pairData.token0,
+        security,
 
-        token1:
-          pairData.token1,
-
-        reserve0:
-          pairData.reserve0.toString(),
-
-        reserve1:
-          pairData.reserve1.toString(),
-
-        security:
-          tokenSecurity,
-
-        market:
-          market.pairAddress
-            ? market
-            : {
-                ...market,
-                pairAddress:
-                  normalizedAddress,
-              },
+        market,
 
         liquidity,
 
         holders,
+
+        socials,
+
+        sourceVerified:
+          source.verified,
+
+        launchTime:
+          market.pairCreatedAt,
       };
     }
 
@@ -958,95 +2163,6 @@ export const scanContract = async (
 
       isContract: true,
 
-      type: "pair",
-
-      token0:
-        pairData.token0,
-
-      token1:
-        pairData.token1,
-
-      reserve0:
-        pairData.reserve0.toString(),
-
-      reserve1:
-        pairData.reserve1.toString(),
+      type: "contract",
     };
-  }
-
-  /**
-   * Normal token contract.
-   */
-  const tokenData =
-    await readToken(
-      normalizedAddress
-    );
-
-  if (
-    tokenData.hasTokenData
-  ) {
-    const security =
-      await analyzeSecurity(
-        normalizedAddress
-      );
-
-    const market =
-      await fetchDexScreenerData(
-        normalizedAddress
-      );
-
-    const liquidity =
-      await analyzeLP(
-        market
-      );
-
-    const holders =
-      tokenData.totalSupply &&
-      tokenData.decimals !==
-        undefined
-        ? await analyzeHolders(
-            normalizedAddress,
-            tokenData.totalSupply,
-            tokenData.decimals
-          )
-        : emptyHolderData();
-
-    return {
-      address:
-        normalizedAddress,
-
-      isContract: true,
-
-      type: "token",
-
-      name:
-        tokenData.name,
-
-      symbol:
-        tokenData.symbol,
-
-      decimals:
-        tokenData.decimals,
-
-      totalSupply:
-        tokenData.totalSupply,
-
-      security,
-
-      market,
-
-      liquidity,
-
-      holders,
-    };
-  }
-
-  return {
-    address:
-      normalizedAddress,
-
-    isContract: true,
-
-    type: "contract",
   };
-};

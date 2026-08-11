@@ -49,7 +49,9 @@ const formatMoney = (
     return "—";
   }
 
-  if (value === 0) {
+  if (
+    value === 0
+  ) {
     return "$0";
   }
 
@@ -139,6 +141,125 @@ const riskEmoji = (
   }
 };
 
+const formatLaunchTime = (
+  timestamp?: number | null
+): string | null => {
+  if (
+    timestamp === null ||
+    timestamp === undefined ||
+    !Number.isFinite(timestamp)
+  ) {
+    return null;
+  }
+
+  try {
+    const date =
+      new Date(
+        timestamp
+      );
+
+    if (
+      Number.isNaN(
+        date.getTime()
+      )
+    ) {
+      return null;
+    }
+
+    return date.toLocaleString(
+      "en-US",
+      {
+        year: "numeric",
+        month: "short",
+        day: "numeric",
+        hour: "2-digit",
+        minute: "2-digit",
+        timeZone: "UTC",
+      }
+    ) + " UTC";
+  } catch {
+    return null;
+  }
+};
+
+const formatSocials = (
+  result: ScanResult
+): string | null => {
+  const socials =
+    result.socials;
+
+  if (!socials) {
+    return null;
+  }
+
+  const found: string[] =
+    [];
+
+  if (
+    socials.twitter
+  ) {
+    found.push("X");
+  }
+
+  if (
+    socials.telegram
+  ) {
+    found.push("Telegram");
+  }
+
+  if (
+    socials.website
+  ) {
+    found.push("Website");
+  }
+
+  if (
+    socials.discord
+  ) {
+    found.push("Discord");
+  }
+
+  if (
+    socials.github
+  ) {
+    found.push("GitHub");
+  }
+
+  if (
+    socials.youtube
+  ) {
+    found.push("YouTube");
+  }
+
+  if (
+    socials.instagram
+  ) {
+    found.push("Instagram");
+  }
+
+  if (
+    socials.facebook
+  ) {
+    found.push("Facebook");
+  }
+
+  if (
+    socials.tiktok
+  ) {
+    found.push("TikTok");
+  }
+
+  if (
+    found.length === 0
+  ) {
+    return null;
+  }
+
+  return found.join(
+    " • "
+  );
+};
+
 /* -------------------------------------------------------------------------- */
 /* SHORT SCAN FORMATTER                                                       */
 /* -------------------------------------------------------------------------- */
@@ -156,10 +277,6 @@ const formatScanResult = (
     );
   }
 
-  /*
-   * A genuine pair that could not be resolved
-   * to an ERC20 token.
-   */
   if (
     result.type === "pair"
   ) {
@@ -222,8 +339,9 @@ const formatScanResult = (
     )}\n\n`;
 
   /*
-   * RISK
+   * SECURITY
    */
+
   response +=
     `Security: ${riskEmoji(
       risk
@@ -232,6 +350,7 @@ const formatScanResult = (
   /*
    * MARKET
    */
+
   if (
     market &&
     (
@@ -277,60 +396,122 @@ const formatScanResult = (
   }
 
   /*
-   * LIQUIDITY
+   * LP
    */
+
   if (
-    liquidity &&
-    (
-      liquidity.status !==
-        "UNKNOWN" ||
-      liquidity.lpBurnPercent !==
-        null
-    )
+    liquidity
   ) {
     response +=
       `\nLP: `;
 
-    if (
-      liquidity.status ===
-      "BURNED"
+    switch (
+      liquidity.status
     ) {
-      response +=
-        "Burned";
-    } else if (
-      liquidity.status ===
-      "LOCKED"
-    ) {
-      response +=
-        "Locked";
-    } else if (
-      liquidity.status ===
-      "EXPIRED"
-    ) {
-      response +=
-        "Lock expired";
-    } else {
-      response +=
-        "Unknown";
+      case "BURNED":
+        response +=
+          "Burned";
+        break;
+
+      case "LOCKED":
+        response +=
+          "Locked";
+        break;
+
+      case "EXPIRED":
+        response +=
+          "Lock expired";
+        break;
+
+      default:
+        response +=
+          "Unknown";
+        break;
     }
 
     if (
-      liquidity.lpBurnPercent !==
+      liquidity.lpAmount !==
       null
     ) {
       response +=
-        ` (${formatPercent(
-          liquidity.lpBurnPercent
-        )})`;
+        ` • ${formatNumber(
+          liquidity.lpAmount
+        )} LP`;
     }
 
     response +=
       `\n`;
+
+    /*
+     * IMPORTANT:
+     *
+     * market is optional on ScanResult.
+     * Narrow it once before accessing its
+     * token pool fields.
+     */
+
+    if (
+      market
+    ) {
+      const tokenInPoolPercent =
+        market.tokenInPoolPercent;
+
+      const tokenReserve =
+        market.tokenReserve;
+
+      if (
+        tokenInPoolPercent !==
+        null
+      ) {
+        response +=
+          `Pool: ${formatPercent(
+            tokenInPoolPercent
+          )} of supply`;
+
+        if (
+          tokenReserve !==
+          null
+        ) {
+          response +=
+            ` (${formatNumber(
+              tokenReserve
+            )} tokens)`;
+        }
+
+        response +=
+          `\n`;
+      }
+    }
+
+    if (
+      liquidity.lpBurnPercent !==
+        null &&
+      liquidity.status !==
+        "BURNED"
+    ) {
+      response +=
+        `LP Burned: ${formatPercent(
+          liquidity.lpBurnPercent
+        )}\n`;
+    }
+
+    if (
+      liquidity.status ===
+        "LOCKED" &&
+      liquidity.remainingDays !==
+        null
+    ) {
+      response +=
+        `Lock: ${formatNumber(
+          liquidity.remainingDays
+        )} days remaining\n`;
+    }
   }
 
   /*
    * HOLDERS
    */
+
   if (
     holders?.holders !==
       null &&
@@ -343,9 +524,34 @@ const formatScanResult = (
       )}\n`;
   }
 
+  if (
+    holders?.topHolders &&
+    holders.topHolders.length > 0
+  ) {
+    const top =
+      holders.topHolders
+        .slice(0, 3)
+        .map(
+          (
+            holder,
+            index
+          ) =>
+            `${index + 1}. ${shortenAddress(
+              holder.address
+            )} ${formatPercent(
+              holder.percent
+            )}`
+        )
+        .join(" • ");
+
+    response +=
+      `Top: ${top}\n`;
+  }
+
   /*
    * TAX
    */
+
   if (
     security?.buyTax !==
       null ||
@@ -356,25 +562,44 @@ const formatScanResult = (
       `Tax: ` +
       `${
         security?.buyTax !==
-        null &&
+          null &&
         security?.buyTax !==
-        undefined
+          undefined
           ? `${security.buyTax}%`
           : "?"
       } buy / ` +
       `${
         security?.sellTax !==
-        null &&
+          null &&
         security?.sellTax !==
-        undefined
+          undefined
           ? `${security.sellTax}%`
           : "?"
       } sell\n`;
   }
 
   /*
-   * Important security warnings only.
+   * LAUNCH
    */
+
+  const launch =
+    formatLaunchTime(
+      result.launchTime
+    );
+
+  if (
+    launch
+  ) {
+    response +=
+      `Launched: ${launch}\n`;
+  }
+
+  /*
+   * SECURITY FINDINGS
+   *
+   * Only display meaningful detected capabilities.
+   */
+
   const warnings: string[] =
     [];
 
@@ -383,7 +608,7 @@ const formatScanResult = (
     true
   ) {
     warnings.push(
-      "Mint function detected"
+      "Mint"
     );
   }
 
@@ -392,7 +617,25 @@ const formatScanResult = (
     true
   ) {
     warnings.push(
-      "Blacklist function detected"
+      "Blacklist"
+    );
+  }
+
+  if (
+    security?.hasWhitelistFunction ===
+    true
+  ) {
+    warnings.push(
+      "Whitelist"
+    );
+  }
+
+  if (
+    security?.hasTradingControl ===
+    true
+  ) {
+    warnings.push(
+      "Trading control"
     );
   }
 
@@ -401,7 +644,16 @@ const formatScanResult = (
     true
   ) {
     warnings.push(
-      "Proxy detected"
+      "Proxy"
+    );
+  }
+
+  if (
+    security?.isPausable ===
+    true
+  ) {
+    warnings.push(
+      "Pausable"
     );
   }
 
@@ -415,8 +667,36 @@ const formatScanResult = (
   }
 
   /*
+   * SOCIALS
+   */
+
+  const socialSummary =
+    formatSocials(
+      result
+    );
+
+  if (
+    socialSummary
+  ) {
+    response +=
+      `🔗 ${socialSummary}\n`;
+  }
+
+  /*
+   * SOURCE
+   */
+
+  if (
+    result.sourceVerified
+  ) {
+    response +=
+      `Source: Verified\n`;
+  }
+
+  /*
    * DEX
    */
+
   if (
     market?.dex ||
     market?.pairLabel
@@ -603,23 +883,18 @@ bot.on(
     const text =
       ctx.message.text.trim();
 
-    if (!text) {
+    if (
+      !text
+    ) {
       return;
     }
 
-    /*
-     * Commands are handled separately.
-     */
     if (
       text.startsWith("/")
     ) {
       return;
     }
 
-    /*
-     * Any detected address goes directly
-     * to the scanner.
-     */
     const addresses =
       extractAddresses(
         text
@@ -636,10 +911,6 @@ bot.on(
       return;
     }
 
-    /*
-     * Let the community relevance layer
-     * decide whether the AI should respond.
-     */
     if (
       !isCommunityRelevant(
         text

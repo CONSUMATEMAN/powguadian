@@ -1,24 +1,54 @@
 import { ethers } from "ethers";
 import { config } from "../config/env";
 
-const provider =
-  new ethers.JsonRpcProvider(
-    config.bscRpcUrl
-  );
+const provider = new ethers.JsonRpcProvider(
+  config.bscRpcUrl
+);
 
-const ERC20_ABI = [
+const SECURITY_ABI = [
   "function owner() view returns (address)",
+
   "function mint(address,uint256)",
   "function burn(uint256)",
+
   "function blacklist(address)",
   "function setBlacklist(address,bool)",
+  "function isBlacklisted(address) view returns (bool)",
+  "function blacklisted(address) view returns (bool)",
+
+  "function whitelist(address)",
+  "function setWhitelist(address,bool)",
+  "function isWhitelisted(address) view returns (bool)",
+  "function whitelisted(address) view returns (bool)",
+
   "function tradingEnabled() view returns (bool)",
   "function tradingOpen() view returns (bool)",
   "function swapEnabled() view returns (bool)",
+
   "function buyTax() view returns (uint256)",
   "function sellTax() view returns (uint256)",
   "function buyFee() view returns (uint256)",
   "function sellFee() view returns (uint256)",
+  "function totalBuyTax() view returns (uint256)",
+  "function totalSellTax() view returns (uint256)",
+  "function totalBuyFee() view returns (uint256)",
+  "function totalSellFee() view returns (uint256)",
+
+  "function transferTax() view returns (uint256)",
+  "function transferFee() view returns (uint256)",
+
+  "function maxTxAmount() view returns (uint256)",
+  "function maxTransactionAmount() view returns (uint256)",
+  "function maxWallet() view returns (uint256)",
+  "function maxWalletAmount() view returns (uint256)",
+
+  "function paused() view returns (bool)",
+
+  "function renounceOwnership()",
+  "function upgradeTo(address)",
+  "function upgradeToAndCall(address,bytes)",
+
+  "function implementation() view returns (address)",
 ];
 
 const PROXY_ABI = [
@@ -38,14 +68,16 @@ export interface SecurityResult {
   canMint: boolean | null;
   canBurn: boolean | null;
 
-  hasBlacklistFunction:
-    boolean | null;
+  hasBlacklistFunction: boolean | null;
+  hasWhitelistFunction: boolean | null;
 
-  hasTradingControl:
-    boolean | null;
+  hasTradingControl: boolean | null;
+  hasTaxFunctions: boolean | null;
 
-  hasTaxFunctions:
-    boolean | null;
+  hasMaxTx: boolean | null;
+  hasMaxWallet: boolean | null;
+
+  isPausable: boolean | null;
 
   isProxy: boolean;
   implementation: string | null;
@@ -69,22 +101,47 @@ const isZeroAddress = (
   address.toLowerCase() ===
   ethers.ZeroAddress.toLowerCase();
 
-const hasFunction = (
-  contract: ethers.Contract,
+const getSelector = (
   signature: string
-): boolean => {
+): string | null => {
   try {
+    const iface =
+      new ethers.Interface([
+        `function ${signature}`,
+      ]);
+
     const functionName =
       signature.split("(")[0];
 
-    return (
-      contract.interface.getFunction(
+    const fragment =
+      iface.getFunction(
         functionName
-      ) !== null
-    );
+      );
+
+    return fragment?.selector
+      ? fragment.selector.toLowerCase()
+      : null;
   } catch {
+    return null;
+  }
+};
+
+const bytecodeHasFunction = (
+  bytecode: string,
+  signature: string
+): boolean => {
+  const selector =
+    getSelector(signature);
+
+  if (!selector) {
     return false;
   }
+
+  return bytecode
+    .toLowerCase()
+    .includes(
+      selector.slice(2)
+    );
 };
 
 const emptySecurityResult =
@@ -97,14 +154,16 @@ const emptySecurityResult =
     canMint: null,
     canBurn: null,
 
-    hasBlacklistFunction:
-      null,
+    hasBlacklistFunction: null,
+    hasWhitelistFunction: null,
 
-    hasTradingControl:
-      null,
+    hasTradingControl: null,
+    hasTaxFunctions: null,
 
-    hasTaxFunctions:
-      null,
+    hasMaxTx: null,
+    hasMaxWallet: null,
+
+    isPausable: null,
 
     isProxy: false,
     implementation: null,
@@ -121,6 +180,49 @@ const emptySecurityResult =
 
     warnings: [],
   });
+
+const safeReadNumber = async (
+  contract: ethers.Contract,
+  functionName: string
+): Promise<number | null> => {
+  try {
+    const value =
+      await contract[functionName]();
+
+    const number =
+      Number(value);
+
+    if (
+      !Number.isFinite(number)
+    ) {
+      return null;
+    }
+
+    return number;
+  } catch {
+    return null;
+  }
+};
+
+const safeReadString = async (
+  contract: ethers.Contract,
+  functionName: string
+): Promise<string | null> => {
+  try {
+    const value =
+      await contract[functionName]();
+
+    if (
+      typeof value === "bigint"
+    ) {
+      return value.toString();
+    }
+
+    return String(value);
+  } catch {
+    return null;
+  }
+};
 
 export const analyzeSecurity =
   async (
@@ -140,21 +242,48 @@ export const analyzeSecurity =
         address
       );
 
+    let bytecode: string;
+
+    try {
+      bytecode =
+        await provider.getCode(
+          normalizedAddress
+        );
+    } catch {
+      return result;
+    }
+
+    if (
+      bytecode === "0x"
+    ) {
+      return result;
+    }
+
     const contract =
       new ethers.Contract(
         normalizedAddress,
-        ERC20_ABI,
+        SECURITY_ABI,
         provider
       );
 
     /*
-     * OWNERSHIP
+     * IMPORTANT:
+     *
+     * Function detection is based on the deployed
+     * bytecode selectors, not merely on our ABI.
+     *
+     * This prevents false positives caused by
+     * putting a function into the ABI ourselves.
      */
-    if (
-      hasFunction(
-        contract,
+
+    const ownerSelector =
+      bytecodeHasFunction(
+        bytecode,
         "owner()"
-      )
+      );
+
+    if (
+      ownerSelector
     ) {
       try {
         const owner =
@@ -176,204 +305,372 @@ export const analyzeSecurity =
             isZeroAddress(
               owner
             );
-
-          if (
-            !result.ownerRenounced
-          ) {
-            result.warnings.push(
-              "Contract ownership appears to remain active."
-            );
-          }
         }
       } catch {
-        result.warnings.push(
-          "Ownership could not be verified."
-        );
+        result.ownerRenounced =
+          null;
       }
     }
 
     /*
      * MINT
-     *
-     * ABI presence alone does not prove
-     * that arbitrary minting is actually
-     * possible. Therefore this is reported
-     * as detected functionality, not proof
-     * of malicious behavior.
      */
-    result.canMint =
-      hasFunction(
-        contract,
+
+    const mintDetected =
+      bytecodeHasFunction(
+        bytecode,
         "mint(address,uint256)"
       );
 
-    if (
-      result.canMint
-    ) {
-      result.warnings.push(
-        "Mint functionality was detected."
-      );
-    }
+    result.canMint =
+      mintDetected;
 
     /*
      * BURN
      */
+
     result.canBurn =
-      hasFunction(
-        contract,
+      bytecodeHasFunction(
+        bytecode,
         "burn(uint256)"
       );
 
     /*
      * BLACKLIST
      */
-    result.hasBlacklistFunction =
-      hasFunction(
-        contract,
+
+    const blacklistDetected =
+      bytecodeHasFunction(
+        bytecode,
         "blacklist(address)"
       ) ||
-      hasFunction(
-        contract,
+      bytecodeHasFunction(
+        bytecode,
         "setBlacklist(address,bool)"
+      ) ||
+      bytecodeHasFunction(
+        bytecode,
+        "isBlacklisted(address)"
+      ) ||
+      bytecodeHasFunction(
+        bytecode,
+        "blacklisted(address)"
       );
 
-    if (
-      result.hasBlacklistFunction
-    ) {
-      result.warnings.push(
-        "Blacklist functionality was detected."
-      );
-    }
+    result.hasBlacklistFunction =
+      blacklistDetected;
 
     /*
-     * TRADING CONTROL
+     * WHITELIST
      */
-    result.hasTradingControl =
-      hasFunction(
-        contract,
+
+    const whitelistDetected =
+      bytecodeHasFunction(
+        bytecode,
+        "whitelist(address)"
+      ) ||
+      bytecodeHasFunction(
+        bytecode,
+        "setWhitelist(address,bool)"
+      ) ||
+      bytecodeHasFunction(
+        bytecode,
+        "isWhitelisted(address)"
+      ) ||
+      bytecodeHasFunction(
+        bytecode,
+        "whitelisted(address)"
+      );
+
+    result.hasWhitelistFunction =
+      whitelistDetected;
+
+    /*
+     * TRADING CONTROLS
+     */
+
+    const tradingDetected =
+      bytecodeHasFunction(
+        bytecode,
         "tradingEnabled()"
       ) ||
-      hasFunction(
-        contract,
+      bytecodeHasFunction(
+        bytecode,
         "tradingOpen()"
       ) ||
-      hasFunction(
-        contract,
+      bytecodeHasFunction(
+        bytecode,
         "swapEnabled()"
       );
 
-    if (
-      result.hasTradingControl
-    ) {
-      result.warnings.push(
-        "Trading-control functionality was detected."
-      );
-    }
+    result.hasTradingControl =
+      tradingDetected;
 
     /*
-     * TAX / FEE FUNCTIONS
+     * TAX / FEE GETTERS
      */
-    const hasBuyTax =
-      hasFunction(
-        contract,
+
+    const buyTaxGetter =
+      bytecodeHasFunction(
+        bytecode,
         "buyTax()"
-      ) ||
-      hasFunction(
-        contract,
+      );
+
+    const sellTaxGetter =
+      bytecodeHasFunction(
+        bytecode,
+        "sellTax()"
+      );
+
+    const buyFeeGetter =
+      bytecodeHasFunction(
+        bytecode,
         "buyFee()"
       );
 
-    const hasSellTax =
-      hasFunction(
-        contract,
-        "sellTax()"
-      ) ||
-      hasFunction(
-        contract,
+    const sellFeeGetter =
+      bytecodeHasFunction(
+        bytecode,
         "sellFee()"
       );
 
+    const totalBuyTaxGetter =
+      bytecodeHasFunction(
+        bytecode,
+        "totalBuyTax()"
+      );
+
+    const totalSellTaxGetter =
+      bytecodeHasFunction(
+        bytecode,
+        "totalSellTax()"
+      );
+
+    const totalBuyFeeGetter =
+      bytecodeHasFunction(
+        bytecode,
+        "totalBuyFee()"
+      );
+
+    const totalSellFeeGetter =
+      bytecodeHasFunction(
+        bytecode,
+        "totalSellFee()"
+      );
+
     result.hasTaxFunctions =
-      hasBuyTax ||
-      hasSellTax;
+      buyTaxGetter ||
+      sellTaxGetter ||
+      buyFeeGetter ||
+      sellFeeGetter ||
+      totalBuyTaxGetter ||
+      totalSellTaxGetter ||
+      totalBuyFeeGetter ||
+      totalSellFeeGetter;
 
     /*
      * BUY TAX
      */
+
     if (
-      hasFunction(
-        contract,
-        "buyTax()"
-      )
+      buyTaxGetter
     ) {
-      try {
-        result.buyTax =
-          Number(
-            await contract.buyTax()
-          );
-      } catch {
-        result.buyTax = null;
-      }
+      result.buyTax =
+        await safeReadNumber(
+          contract,
+          "buyTax"
+        );
     } else if (
-      hasFunction(
-        contract,
-        "buyFee()"
-      )
+      buyFeeGetter
     ) {
-      try {
-        result.buyTax =
-          Number(
-            await contract.buyFee()
-          );
-      } catch {
-        result.buyTax = null;
-      }
+      result.buyTax =
+        await safeReadNumber(
+          contract,
+          "buyFee"
+        );
+    } else if (
+      totalBuyTaxGetter
+    ) {
+      result.buyTax =
+        await safeReadNumber(
+          contract,
+          "totalBuyTax"
+        );
+    } else if (
+      totalBuyFeeGetter
+    ) {
+      result.buyTax =
+        await safeReadNumber(
+          contract,
+          "totalBuyFee"
+        );
     }
 
     /*
      * SELL TAX
      */
-    if (
-      hasFunction(
-        contract,
-        "sellTax()"
-      )
-    ) {
-      try {
-        result.sellTax =
-          Number(
-            await contract.sellTax()
-          );
-      } catch {
-        result.sellTax = null;
-      }
-    } else if (
-      hasFunction(
-        contract,
-        "sellFee()"
-      )
-    ) {
-      try {
-        result.sellTax =
-          Number(
-            await contract.sellFee()
-          );
-      } catch {
-        result.sellTax = null;
-      }
-    }
 
     if (
-      result.hasTaxFunctions
+      sellTaxGetter
     ) {
-      result.warnings.push(
-        "Buy/sell tax or fee functionality was detected."
-      );
+      result.sellTax =
+        await safeReadNumber(
+          contract,
+          "sellTax"
+        );
+    } else if (
+      sellFeeGetter
+    ) {
+      result.sellTax =
+        await safeReadNumber(
+          contract,
+          "sellFee"
+        );
+    } else if (
+      totalSellTaxGetter
+    ) {
+      result.sellTax =
+        await safeReadNumber(
+          contract,
+          "totalSellTax"
+        );
+    } else if (
+      totalSellFeeGetter
+    ) {
+      result.sellTax =
+        await safeReadNumber(
+          contract,
+          "totalSellFee"
+        );
     }
+
+    /*
+     * TRANSFER TAX
+     */
+
+    const transferTaxGetter =
+      bytecodeHasFunction(
+        bytecode,
+        "transferTax()"
+      );
+
+    const transferFeeGetter =
+      bytecodeHasFunction(
+        bytecode,
+        "transferFee()"
+      );
+
+    if (
+      transferTaxGetter
+    ) {
+      result.transferTax =
+        await safeReadNumber(
+          contract,
+          "transferTax"
+        );
+    } else if (
+      transferFeeGetter
+    ) {
+      result.transferTax =
+        await safeReadNumber(
+          contract,
+          "transferFee"
+        );
+    }
+
+    /*
+     * MAX TRANSACTION
+     */
+
+    const maxTxAmountGetter =
+      bytecodeHasFunction(
+        bytecode,
+        "maxTxAmount()"
+      );
+
+    const maxTransactionAmountGetter =
+      bytecodeHasFunction(
+        bytecode,
+        "maxTransactionAmount()"
+      );
+
+    result.hasMaxTx =
+      maxTxAmountGetter ||
+      maxTransactionAmountGetter;
+
+    if (
+      maxTxAmountGetter
+    ) {
+      result.maxTx =
+        await safeReadString(
+          contract,
+          "maxTxAmount"
+        );
+    } else if (
+      maxTransactionAmountGetter
+    ) {
+      result.maxTx =
+        await safeReadString(
+          contract,
+          "maxTransactionAmount"
+        );
+    }
+
+    /*
+     * MAX WALLET
+     */
+
+    const maxWalletGetter =
+      bytecodeHasFunction(
+        bytecode,
+        "maxWallet()"
+      );
+
+    const maxWalletAmountGetter =
+      bytecodeHasFunction(
+        bytecode,
+        "maxWalletAmount()"
+      );
+
+    result.hasMaxWallet =
+      maxWalletGetter ||
+      maxWalletAmountGetter;
+
+    if (
+      maxWalletGetter
+    ) {
+      result.maxWallet =
+        await safeReadString(
+          contract,
+          "maxWallet"
+        );
+    } else if (
+      maxWalletAmountGetter
+    ) {
+      result.maxWallet =
+        await safeReadString(
+          contract,
+          "maxWalletAmount"
+        );
+    }
+
+    /*
+     * PAUSABLE
+     */
+
+    const pausedGetter =
+      bytecodeHasFunction(
+        bytecode,
+        "paused()"
+      );
+
+    result.isPausable =
+      pausedGetter;
 
     /*
      * PROXY
      */
+
     const proxyContract =
       new ethers.Contract(
         normalizedAddress,
@@ -393,7 +690,9 @@ export const analyzeSecurity =
         ) &&
         !isZeroAddress(
           implementation
-        )
+        ) &&
+        implementation.toLowerCase() !==
+          normalizedAddress.toLowerCase()
       ) {
         result.isProxy =
           true;
@@ -402,10 +701,6 @@ export const analyzeSecurity =
           ethers.getAddress(
             implementation
           );
-
-        result.warnings.push(
-          "Proxy implementation was detected."
-        );
       }
     } catch {
       result.isProxy =
@@ -413,32 +708,90 @@ export const analyzeSecurity =
     }
 
     /*
-     * These values require deeper source-code,
-     * simulation, or indexed data.
-     *
-     * We intentionally report UNKNOWN.
+     * Open-source verification is provided
+     * by scanner/BscScan enrichment.
      */
+
     result.isOpenSource =
       null;
 
     result.isHoneypot =
       null;
 
-    result.transferTax =
-      null;
+    /*
+     * SECURITY WARNINGS
+     *
+     * Do not automatically classify every detected
+     * function as HIGH risk.
+     */
 
-    result.maxTx =
-      null;
+    if (
+      result.ownerRenounced ===
+      false
+    ) {
+      result.warnings.push(
+        "Ownership is still active"
+      );
+    }
 
-    result.maxWallet =
-      null;
+    if (
+      result.canMint ===
+      true
+    ) {
+      result.warnings.push(
+        "Mint capability detected"
+      );
+    }
+
+    if (
+      result.hasBlacklistFunction ===
+      true
+    ) {
+      result.warnings.push(
+        "Blacklist capability detected"
+      );
+    }
+
+    if (
+      result.hasWhitelistFunction ===
+      true
+    ) {
+      result.warnings.push(
+        "Whitelist capability detected"
+      );
+    }
+
+    if (
+      result.hasTradingControl ===
+      true
+    ) {
+      result.warnings.push(
+        "Trading control detected"
+      );
+    }
+
+    if (
+      result.isProxy
+    ) {
+      result.warnings.push(
+        "Upgradeable proxy detected"
+      );
+    }
+
+    if (
+      result.isPausable
+    ) {
+      result.warnings.push(
+        "Pause control detected"
+      );
+    }
 
     /*
-     * CONSERVATIVE RISK SCORE
+     * RISK SCORE
      *
-     * Function detection does not automatically
-     * mean malicious behavior.
+     * Function presence alone is not automatically HIGH.
      */
+
     let score = 0;
 
     if (
@@ -449,16 +802,24 @@ export const analyzeSecurity =
     }
 
     if (
-      result.canMint === true
+      result.canMint ===
+      true
     ) {
-      score += 2;
+      score += 1;
     }
 
     if (
       result.hasBlacklistFunction ===
       true
     ) {
-      score += 2;
+      score += 1;
+    }
+
+    if (
+      result.hasWhitelistFunction ===
+      true
+    ) {
+      score += 1;
     }
 
     if (
@@ -469,18 +830,52 @@ export const analyzeSecurity =
     }
 
     if (
-      result.isProxy === true
+      result.isProxy
+    ) {
+      score += 2;
+    }
+
+    if (
+      result.isPausable
     ) {
       score += 1;
     }
 
     if (
-      score >= 5
+      result.buyTax !== null &&
+      result.buyTax > 10
+    ) {
+      score += 2;
+    }
+
+    if (
+      result.sellTax !== null &&
+      result.sellTax > 10
+    ) {
+      score += 2;
+    }
+
+    if (
+      result.buyTax !== null &&
+      result.buyTax > 20
+    ) {
+      score += 2;
+    }
+
+    if (
+      result.sellTax !== null &&
+      result.sellTax > 20
+    ) {
+      score += 2;
+    }
+
+    if (
+      score >= 7
     ) {
       result.riskLevel =
         "HIGH";
     } else if (
-      score >= 2
+      score >= 3
     ) {
       result.riskLevel =
         "MEDIUM";
